@@ -30,6 +30,9 @@ export interface Annotation {
     opacity?: number;
     custom?: Record<string, unknown>;
     segmentRects?: Array<{ origin: { x: number; y: number }; size: { width: number; height: number } }>;
+    inReplyToId?: string;
+    flags?: string[];
+    icon?: string;
     [key: string]: unknown;
 }
 
@@ -156,6 +159,15 @@ export function annotationsToXFDF(annotations: Annotation[], documentId?: string
         }
         if (annot.opacity !== undefined) {
             xfdf += ` opacity="${annot.opacity}"`;
+        }
+        if (annot.inReplyToId) {
+            xfdf += ` inreplyto="${escapeXml(String(annot.inReplyToId))}"`;
+        }
+        if (annot.icon) {
+            xfdf += ` icon="${escapeXml(String(annot.icon))}"`;
+        }
+        if (annot.flags && annot.flags.length > 0) {
+            xfdf += ` flags="${annot.flags.join(',')}"`;
         }
 
         // Check if we have content or segmentRects to serialize
@@ -350,6 +362,21 @@ export function parseXFDF(xfdfString: string): Annotation[] {
         const contentsEl = child.querySelector('contents');
         if (contentsEl && contentsEl.textContent) {
             annotation.contents = unescapeXml(contentsEl.textContent);
+        }
+
+        const inReplyTo = child.getAttribute('inreplyto');
+        if (inReplyTo) {
+            annotation.inReplyToId = unescapeXml(inReplyTo);
+        }
+
+        const icon = child.getAttribute('icon');
+        if (icon) {
+            annotation.icon = unescapeXml(icon);
+        }
+
+        const flags = child.getAttribute('flags');
+        if (flags) {
+            annotation.flags = flags.split(',').map(f => f.trim());
         }
 
         annotations.push(annotation);

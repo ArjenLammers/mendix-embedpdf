@@ -17,6 +17,8 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
     const onXfdfChangeRef = useRef(onXfdfChange);
     const hasImportedAnnotations = useRef<string | null>(null); // Track which document we've imported for
     const currentDocumentGuid = useRef<string | null>(null); // Track currently opened document GUID
+    const pendingImportCount = useRef(0); // Count of annotations being imported
+    const importTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timeout for import completion
     let listeningToPageChanges = false;
 
     // Extract GUID from file URL
@@ -89,8 +91,6 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
     const ready = async () => {
         console.info("PDF Viewer is ready");
         const registry = await viewerRef.current?.registry;
-        console.info("Registry: ", registry);
-
         const documentManager = registry
             ?.getPlugin<DocumentManagerPlugin>('document-manager')
             ?.provides() as DocumentManagerPlugin;
@@ -99,49 +99,13 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
             ?.getPlugin<AnnotationPlugin>('annotation')
             ?.provides() as AnnotationPlugin;
 
-        // Import annotations from XFDF when document is opened
+        // Track when a new document is opened (import will happen after 'loaded' event)
         if (documentManager) {
             documentManager.onDocumentOpened((docState) => {
                 console.info("Document opened", docState);
-                if (xfdfRef.current?.status === 'available' && annotationPlugin) {
-                    // Only import once per document
-                    if (hasImportedAnnotations.current !== docState.id) {
-                        hasImportedAnnotations.current = docState.id;
-                        
-                        // First, clear all existing annotations from the loaded document
-                        const state = annotationPlugin.getState();
-                        const annotationsToDelete: { pageIndex: number; id: string }[] = [];
-                        for (const [pageIndex, uids] of Object.entries(state.pages)) {
-                            for (const uid of uids) {
-                                const tracked = state.byUid[uid];
-                                if (tracked?.object) {
-                                    annotationsToDelete.push({
-                                        pageIndex: Number(pageIndex),
-                                        id: tracked.object.id
-                                    });
-                                }
-                            }
-                        }
-                        
-                        if (annotationsToDelete.length > 0) {
-                            console.info('Removing existing annotations:', annotationsToDelete.length);
-                            annotationPlugin.deleteAnnotations(annotationsToDelete);
-                        }
-                        
-                        // Then import annotations from XFDF
-                        const annotations = parseXFDF(xfdfRef.current.value);
-                        if (annotations && annotations.length > 0) {
-                            console.info('Importing annotations from XFDF:', annotations);
-                            try {
-                                const importItems = annotations.map(annot => ({
-                                    annotation: annot as any
-                                }));
-                                annotationPlugin.importAnnotations(importItems);
-                            } catch (error) {
-                                console.error('Error importing annotations:', error);
-                            }
-                        }
-                    }
+                // Reset import tracking for new document
+                if (hasImportedAnnotations.current !== docState.id) {
+                    hasImportedAnnotations.current = null;
                 }
             });
         }
@@ -151,9 +115,33 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
             annotationPlugin.onAnnotationEvent((event: AnnotationEvent) => {
                 console.info("Annotation event", event);
 
-                // Serialize to XFDF on create/update/delete (but not on initial load)
-                if (event.type !== 'loaded' && xfdfRef.current) {
-                    getAnnotationsAsXFDF(annotationPlugin, documentManager)
+                // Helper function to start/reset the import timeout
+                const startImportTimeout = () => {
+                    // Clear existing timeout
+                    if (importTimeoutRef.current) {
+                        clearTimeout(importTimeoutRef.current);
+                    }
+                    // Set new 30-second timeout
+                    importTimeoutRef.current = setTimeout(() => {
+                        if (pendingImportCount.current > 0) {
+                            console.warn('Import timeout - no create event for 30 seconds, clearing count:', pendingImportCount.current);
+                            pendingImportCount.current = 0;
+                        }
+                    }, 30000);
+                };
+
+                // Helper function to clear the import timeout
+                const clearImportTimeout = () => {
+                    if (importTimeoutRef.current) {
+                        clearTimeout(importTimeoutRef.current);
+                        importTimeoutRef.current = null;
+                    }
+                };
+
+                // Helper function to serialize XFDF and trigger onChange
+                const serializeAndNotify = () => {
+                    if (pendingImportCount.current == 0) { 
+                        getAnnotationsAsXFDF(annotationPlugin, documentManager)
                         .then(xfdfString => {
                             if (xfdfRef.current?.status === "available") {
                                 xfdfRef.current.setValue(xfdfString);
@@ -166,24 +154,75 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
                         .catch(error => {
                             console.error("Error getting XFDF: ", error);
                         });
+                    }
+                };
+
+                // Import annotations from XFDF after the 'loaded' event (original annotations are now available)
+                if (event.type === 'loaded' && xfdfRef.current?.status === 'available' && documentManager) {
+                    const activeDoc = documentManager.getActiveDocument();
+                    if (activeDoc && hasImportedAnnotations.current !== activeDoc.id) {
+                        hasImportedAnnotations.current = activeDoc.id;
+                        
+                        const annotations = parseXFDF(xfdfRef.current.value);
+                        if (annotations && annotations.length > 0) {
+                            // Get existing annotation IDs to avoid duplicates
+                            const state = annotationPlugin.getState();
+                            const existingIds = new Set<string>();
+                            for (const uids of Object.values(state.pages)) {
+                                for (const uid of uids) {
+                                    const tracked = state.byUid[uid];
+                                    if (tracked?.object?.id) {
+                                        existingIds.add(tracked.object.id);
+                                    }
+                                }
+                            }
+                            
+                            // Filter out annotations that already exist in the document
+                            const newAnnotations = annotations.filter(annot => !existingIds.has(annot.id));
+                            
+                            if (newAnnotations.length > 0) {
+                                console.info('Importing annotations from XFDF:', newAnnotations.length, 'new of', annotations.length, 'total');
+                                try {
+                                    // Set counter to track pending imports
+                                    pendingImportCount.current = newAnnotations.length;
+                                    
+                                    const importItems = newAnnotations.map(annot => ({
+                                        annotation: annot as any
+                                    }));
+                                    annotationPlugin.importAnnotations(importItems);
+                                    
+                                    // Start 30-second timeout - will be reset by each create event
+                                    startImportTimeout();
+                                } catch (error) {
+                                    pendingImportCount.current = 0;
+                                    console.error('Error importing annotations:', error);
+                                }
+                            } else {
+                                console.info('All annotations from XFDF already exist in document');
+                            }
+                        }
+                    }
                 }
 
-                
-                const state = annotationPlugin.getState(); 
+                // Handle create events from imports - decrement counter
+                if (event.type === 'create' && pendingImportCount.current > 0) {
+                    pendingImportCount.current--;
+                    console.info('Import event received, remaining:', pendingImportCount.current);
+                    
+                    if (pendingImportCount.current === 0) {
+                        // All imports done, clear timeout and serialize
+                        clearImportTimeout();
+                    } else {
+                        // Reset timeout since we received an event
+                        startImportTimeout();
+                    }
+                    return; // Skip individual serialization for imported annotations
+                }
 
-                /* console.info(documentManager);
-                const doc = documentManager?.getActiveDocument(); 
-                console.info("Active documentje ", doc); */
-                //debugger;
-                //const annotation = await annotationPlugin.getAnnotations(doc).toPromise();
-                //console.info("Annotations: ", annotation);
-                /* for (let i = 0; i < doc.pages.length; i++) {
-                    console.info(`Annotations for page ${i}`, annotationPlugin.getPageAnnotations(i));
-                } */
-                
-                /* engine?.getAllAnnotations().then(annotations => {
-                    console.info("All annotations", annotations);
-                }); */
+                // Serialize to XFDF on create/update/delete (but not on initial load)
+                if (event.type !== 'loaded' && xfdfRef.current) {
+                    serializeAndNotify();
+                }
             });
         }
 
