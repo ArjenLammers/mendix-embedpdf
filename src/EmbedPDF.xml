@@ -21,6 +21,17 @@
                     <attributeType name="Integer" />
                 </attributeTypes>
             </property>
+            <property key="xfdf" type="attribute" required="false">
+                <caption>XFDF</caption>
+                <description>Stores the XFDF representation of annotations when they change.</description>
+                <attributeTypes>
+                    <attributeType name="String" />
+                </attributeTypes>
+            </property>
+            <property key="onXfdfChange" type="action" required="false">
+                <caption>On XFDF change</caption>
+                <description>Action to execute when the XFDF value changes.</description>
+            </property>
         </propertyGroup>
     </properties>
 </widget>

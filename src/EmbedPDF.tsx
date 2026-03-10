@@ -7,26 +7,45 @@ import { PDFViewerRef, PDFViewer, AnnotationPlugin,
     ScrollEvent, DocumentManagerPlugin, ScrollPlugin, AnnotationEvent } from "@embedpdf/react-pdf-viewer";
 
 import "./ui/EmbedPDF.css";
+import { getAnnotationsAsXFDF, parseXFDF } from "./utils/xfdf";
 
-export function EmbedPDF({ file, activePage }: EmbedPDFContainerProps): ReactElement {
+export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFContainerProps): ReactElement {
 
     const viewerRef = useRef<PDFViewerRef>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const xfdfRef = useRef(xfdf);
+    const onXfdfChangeRef = useRef(onXfdfChange);
+    const hasImportedAnnotations = useRef<string | null>(null); // Track which document we've imported for
+    const currentDocumentGuid = useRef<string | null>(null); // Track currently opened document GUID
     let listeningToPageChanges = false;
 
+    // Extract GUID from file URL
+    const getGuidFromUrl = (url: string): string | null => {
+        const match = url.match(/[?&]guid=([^&]+)/);
+        return match ? match[1] : null;
+    };
+
+    // Keep refs in sync with props
     useEffect(() => {
-        console.info("Use effect");
-    }, []);
+        xfdfRef.current = xfdf;
+    }, [xfdf]);
 
     useEffect(() => {
-        console.info("File changed", file);
+        onXfdfChangeRef.current = onXfdfChange;
+    }, [onXfdfChange]);
+
+    useEffect(() => {
         const sync = async () => {
             const registry = await viewerRef.current?.registry;
             const docManager = registry
                 ?.getPlugin<DocumentManagerPlugin>('document-manager')
                 ?.provides() as DocumentManagerPlugin;
-            if (file?.value?.uri) {
-                console.info("Opening document", file.value.uri);
+            const fileGuid = file?.value?.uri ? getGuidFromUrl(file.value.uri) : null;
+            if (file?.value?.uri && fileGuid && fileGuid !== currentDocumentGuid.current) {
+                console.info("Opening document", file.value.uri, "GUID:", fileGuid);
+                currentDocumentGuid.current = fileGuid;
+                // Reset import tracking when opening a new document
+                hasImportedAnnotations.current = null;
                 await docManager.closeAllDocuments().toPromise();
                 docManager.openDocumentUrl({
                     url: file?.value?.uri || '',
@@ -68,20 +87,89 @@ export function EmbedPDF({ file, activePage }: EmbedPDFContainerProps): ReactEle
     }, [ activePage ]);
 
     const ready = async () => {
-        console.info("PDF Viewer is ready", viewerRef);
+        console.info("PDF Viewer is ready");
         const registry = await viewerRef.current?.registry;
-        
+        console.info("Registry: ", registry);
+
+        const documentManager = registry
+            ?.getPlugin<DocumentManagerPlugin>('document-manager')
+            ?.provides() as DocumentManagerPlugin;
+
         const annotationPlugin = registry
             ?.getPlugin<AnnotationPlugin>('annotation')
             ?.provides() as AnnotationPlugin;
+
+        // Import annotations from XFDF when document is opened
+        if (documentManager) {
+            documentManager.onDocumentOpened((docState) => {
+                console.info("Document opened", docState);
+                if (xfdfRef.current?.status === 'available' && annotationPlugin) {
+                    // Only import once per document
+                    if (hasImportedAnnotations.current !== docState.id) {
+                        hasImportedAnnotations.current = docState.id;
+                        
+                        // First, clear all existing annotations from the loaded document
+                        const state = annotationPlugin.getState();
+                        const annotationsToDelete: { pageIndex: number; id: string }[] = [];
+                        for (const [pageIndex, uids] of Object.entries(state.pages)) {
+                            for (const uid of uids) {
+                                const tracked = state.byUid[uid];
+                                if (tracked?.object) {
+                                    annotationsToDelete.push({
+                                        pageIndex: Number(pageIndex),
+                                        id: tracked.object.id
+                                    });
+                                }
+                            }
+                        }
+                        
+                        if (annotationsToDelete.length > 0) {
+                            console.info('Removing existing annotations:', annotationsToDelete.length);
+                            annotationPlugin.deleteAnnotations(annotationsToDelete);
+                        }
+                        
+                        // Then import annotations from XFDF
+                        const annotations = parseXFDF(xfdfRef.current.value);
+                        if (annotations && annotations.length > 0) {
+                            console.info('Importing annotations from XFDF:', annotations);
+                            try {
+                                const importItems = annotations.map(annot => ({
+                                    annotation: annot as any
+                                }));
+                                annotationPlugin.importAnnotations(importItems);
+                            } catch (error) {
+                                console.error('Error importing annotations:', error);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         if (annotationPlugin) {
-            console.info("Annotation plugin is available", annotationPlugin, annotationPlugin.getState());
-            annotationPlugin.onAnnotationEvent(async (event: AnnotationEvent) => {
+            console.info("Annotation plugin is available", annotationPlugin);
+            annotationPlugin.onAnnotationEvent((event: AnnotationEvent) => {
                 console.info("Annotation event", event);
+
+                // Serialize to XFDF on create/update/delete (but not on initial load)
+                if (event.type !== 'loaded' && xfdfRef.current) {
+                    getAnnotationsAsXFDF(annotationPlugin, documentManager)
+                        .then(xfdfString => {
+                            if (xfdfRef.current?.status === "available") {
+                                xfdfRef.current.setValue(xfdfString);
+                                // Execute the onXfdfChange action if available
+                                if (onXfdfChangeRef.current?.canExecute) {
+                                    onXfdfChangeRef.current.execute();
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error("Error getting XFDF: ", error);
+                        });
+                }
+
                 
-                /* const engine = registry?.getEngine();
-                console.info("Plugin: ", annotationPlugin);
-                const state = annotationPlugin.getState(); */
+                const state = annotationPlugin.getState(); 
 
                 /* console.info(documentManager);
                 const doc = documentManager?.getActiveDocument(); 

@@ -4,7 +4,7 @@
  * @author Mendix Widgets Framework Team
  */
 import { CSSProperties } from "react";
-import { DynamicValue, EditableValue, FileValue } from "mendix";
+import { ActionValue, DynamicValue, EditableValue, FileValue } from "mendix";
 import { Big } from "big.js";
 
 export interface EmbedPDFContainerProps {
@@ -14,6 +14,8 @@ export interface EmbedPDFContainerProps {
     tabIndex?: number;
     file?: DynamicValue<FileValue>;
     activePage?: EditableValue<Big>;
+    xfdf?: EditableValue<string>;
+    onXfdfChange?: ActionValue;
 }
 
 export interface EmbedPDFPreviewProps {
@@ -29,4 +31,6 @@ export interface EmbedPDFPreviewProps {
     translate: (text: string) => string;
     file: string;
     activePage: string;
+    xfdf: string;
+    onXfdfChange: {} | null;
 }
