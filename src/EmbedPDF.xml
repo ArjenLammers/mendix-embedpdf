@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<widget id="mendix.embedpdf.EmbedPDF" pluginWidget="true" needsEntityContext="true" offlineCapable="true"
+        supportedPlatform="Web"
+        xmlns="http://www.mendix.com/widget/1.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.mendix.com/widget/1.0/ ../node_modules/mendix/custom_widget.xsd">
+    <name>Embed PDF</name>
+    <description>Implementation of EmbedPDF in Mendix</description>
+    <icon/>
+    <properties>
+        <propertyGroup caption="General">
+            <property key="file" type="file" required="false">
+                <caption>File</caption>
+                <description>FileDocument that should be of a compatible document.</description>
+            </property>
+        </propertyGroup>
+        <propertyGroup caption="UI">
+            <property key="activePage" type="attribute" required="false">
+                <caption>Active page</caption>
+                <description>The current active page number in the document (starting at 0).</description>
+                <attributeTypes>
+                    <attributeType name="Integer" />
+                </attributeTypes>
+            </property>
+        </propertyGroup>
+    </properties>
+</widget>
