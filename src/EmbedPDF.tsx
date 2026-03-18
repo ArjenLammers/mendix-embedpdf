@@ -8,8 +8,10 @@ import { PDFViewerRef, PDFViewer, AnnotationPlugin,
 
 import "./ui/EmbedPDF.css";
 import { getAnnotationsAsXFDF, parseXFDF } from "./utils/xfdf";
+import { getGuidFromUrl } from "./utils/url";
 
-export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFContainerProps): ReactElement {
+export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
+    const { file, activePage, xfdf, onXfdfChange, annotationsEnabled, autoCommit, annotationAuthor, selectAfterCreate } = props;
 
     const viewerRef = useRef<PDFViewerRef>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -18,14 +20,9 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
     const hasImportedAnnotations = useRef<string | null>(null); // Track which document we've imported for
     const currentDocumentGuid = useRef<string | null>(null); // Track currently opened document GUID
     const pendingImportCount = useRef(0); // Count of annotations being imported
+    const pendingDeleteCount = useRef(0); // Count of annotations being deleted
     const importTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timeout for import completion
     let listeningToPageChanges = false;
-
-    // Extract GUID from file URL
-    const getGuidFromUrl = (url: string): string | null => {
-        const match = url.match(/[?&]guid=([^&]+)/);
-        return match ? match[1] : null;
-    };
 
     // Keep refs in sync with props
     useEffect(() => {
@@ -76,6 +73,13 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
         if (activePage?.status === "available") {
             const sync = async () => {   
                 const registry = await viewerRef.current?.registry;
+                const docManager = registry
+                    ?.getPlugin<DocumentManagerPlugin>('document-manager')
+                    ?.provides() as DocumentManagerPlugin;
+                const activeDoc = docManager?.getActiveDocument();
+                if (!activeDoc) {
+                    return; // No active document yet, skip scrolling
+                }
                 const scrollPlugin = registry
                     ?.getPlugin<ScrollPlugin>('scroll')
                     ?.provides() as ScrollPlugin;
@@ -87,6 +91,15 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
             sync();
         }
     }, [ activePage ]);
+
+    /**
+     * To explain dark magic in here, there are some design decisions to keep into account:
+     *  - A PDF document can contain annotations itself. When we haven't got XFDF contents yet, we keep this in place. On the next change, they should all be serialized and contained into the XFDF.
+     *  - When a PDF document contains annotations, their ID will be re-generated when imported by the PDF viewer. This means we can't combine the XFDF annotations with the existing ones, we need to delete all existing annotations and import them from XFDF.
+     *  - We do not want to trigger the serialization / on change microflow when importing or deleting annotations as part of the XFDF import process, otherwise we would end up in a loop. 
+     *    So we need to track when annotations are created/deleted as part of the import and skip serialization in that case. There are timeouts in place to reset the tracking in case something goes wrong during import and we don't receive the expected events.
+     * 
+     */
 
     const ready = async () => {
         console.info("PDF Viewer is ready");
@@ -101,7 +114,12 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
 
         // Track when a new document is opened (import will happen after 'loaded' event)
         if (documentManager) {
-            documentManager.onDocumentOpened((docState) => {
+            interface DocumentState {
+                id: string;
+                [key: string]: unknown;
+            }
+
+            documentManager.onDocumentOpened((docState: DocumentState) => {
                 console.info("Document opened", docState);
                 // Reset import tracking for new document
                 if (hasImportedAnnotations.current !== docState.id) {
@@ -140,7 +158,7 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
 
                 // Helper function to serialize XFDF and trigger onChange
                 const serializeAndNotify = () => {
-                    if (pendingImportCount.current == 0) { 
+                    if (pendingImportCount.current == 0 && pendingDeleteCount.current == 0) {
                         getAnnotationsAsXFDF(annotationPlugin, documentManager)
                         .then(xfdfString => {
                             if (xfdfRef.current?.status === "available") {
@@ -163,52 +181,53 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
                     if (activeDoc && hasImportedAnnotations.current !== activeDoc.id) {
                         hasImportedAnnotations.current = activeDoc.id;
                         
-                        const annotations = parseXFDF(xfdfRef.current.value);
+                        const annotations = parseXFDF(xfdfRef.current.value || '');
                         if (annotations && annotations.length > 0) {
-                            // Get existing annotation IDs to avoid duplicates
+                            // Remove all existing annotations first
                             const state = annotationPlugin.getState();
-                            const existingIds = new Set<string>();
-                            for (const uids of Object.values(state.pages)) {
-                                for (const uid of uids) {
-                                    const tracked = state.byUid[uid];
-                                    if (tracked?.object?.id) {
-                                        existingIds.add(tracked.object.id);
+                            if (state) {
+                                const annotationsToDelete: Array<{ pageIndex: number; id: string }> = [];
+                                for (const [pageIndexStr, annotationIds] of Object.entries(state.pages)) {
+                                    const pageIndex = parseInt(pageIndexStr, 10);
+                                    for (const id of (annotationIds as string[])) {
+                                        annotationsToDelete.push({ pageIndex, id });
                                     }
                                 }
-                            }
-                            
-                            // Filter out annotations that already exist in the document
-                            const newAnnotations = annotations.filter(annot => !existingIds.has(annot.id));
-                            
-                            if (newAnnotations.length > 0) {
-                                console.info('Importing annotations from XFDF:', newAnnotations.length, 'new of', annotations.length, 'total');
-                                try {
-                                    // Set counter to track pending imports
-                                    pendingImportCount.current = newAnnotations.length;
-                                    
-                                    const importItems = newAnnotations.map(annot => ({
-                                        annotation: annot as any
-                                    }));
-                                    annotationPlugin.importAnnotations(importItems);
-                                    
-                                    // Start 30-second timeout - will be reset by each create event
-                                    startImportTimeout();
-                                } catch (error) {
-                                    pendingImportCount.current = 0;
-                                    console.error('Error importing annotations:', error);
+                                if (annotationsToDelete.length > 0) {
+                                    console.info('Removing', annotationsToDelete.length, 'existing annotations before import');
+                                    pendingDeleteCount.current = annotationsToDelete.length - 1; // Set pending delete count to skip serialization during deletion
+                                    annotationPlugin.deleteAnnotations(annotationsToDelete);
                                 }
-                            } else {
-                                console.info('All annotations from XFDF already exist in document');
+                            }
+
+                            console.info('Importing annotations from XFDF:', annotations.length);
+                            try {
+                                // Set counter to track pending imports
+                                pendingImportCount.current = annotations.length;
+                                
+                                const importItems = annotations.map(annot => ({
+                                    annotation: annot as any
+                                }));
+                                annotationPlugin.importAnnotations(importItems);
+                                
+                                // Start 30-second timeout - will be reset by each create event
+                                startImportTimeout();
+                            } catch (error) {
+                                pendingImportCount.current = 0;
+                                console.error('Error importing annotations:', error);
                             }
                         }
                     }
                 }
 
+                if (event.type === 'delete' && event.committed && pendingDeleteCount.current > 0) {
+                    pendingDeleteCount.current--;
+                    return; // Skip serialization for deletions that are part of the import process
+                }
+
                 // Handle create events from imports - decrement counter
                 if (event.type === 'create' && pendingImportCount.current > 0) {
                     pendingImportCount.current--;
-                    console.info('Import event received, remaining:', pendingImportCount.current);
-                    
                     if (pendingImportCount.current === 0) {
                         // All imports done, clear timeout and serialize
                         clearImportTimeout();
@@ -228,6 +247,73 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
 
     };
 
+    // Build disabledCategories from boolean props
+    // Maps widget property keys to one or more viewer category strings
+    const categoryMap: Record<string, string[]> = {
+        catZoom: ['zoom'],
+        catZoomIn: ['zoom-in'],
+        catZoomOut: ['zoom-out'],
+        catZoomFitPage: ['zoom-fit-page'],
+        catZoomFitWidth: ['zoom-fit-width'],
+        catZoomMarquee: ['zoom-marquee'],
+        catZoomLevel: ['zoom-level'],
+        catAnnotation: ['annotation', 'mode-annotate'],
+        catAnnotationMarkup: ['annotation-markup'],
+        catAnnotationHighlight: ['annotation-highlight'],
+        catAnnotationUnderline: ['annotation-underline'],
+        catAnnotationStrikeout: ['annotation-strikeout'],
+        catAnnotationSquiggly: ['annotation-squiggly'],
+        catAnnotationInk: ['annotation-ink'],
+        catAnnotationText: ['annotation-text'],
+        catAnnotationStamp: ['annotation-stamp'],
+        catAnnotationShape: ['annotation-shape', 'mode-shapes'],
+        catAnnotationRectangle: ['annotation-rectangle'],
+        catAnnotationCircle: ['annotation-circle'],
+        catAnnotationLine: ['annotation-line'],
+        catAnnotationArrow: ['annotation-arrow'],
+        catAnnotationPolygon: ['annotation-polygon'],
+        catAnnotationPolyline: ['annotation-polyline'],
+        catRedaction: ['redaction', 'mode-redact'],
+        catRedactionArea: ['redaction-area'],
+        catRedactionText: ['redaction-text'],
+        catRedactionApply: ['redaction-apply'],
+        catRedactionClear: ['redaction-clear'],
+        catDocument: ['document'],
+        catDocumentOpen: ['document-open'],
+        catDocumentClose: ['document-close'],
+        catDocumentPrint: ['document-print'],
+        catDocumentCapture: ['document-capture'],
+        catDocumentExport: ['document-export'],
+        catDocumentFullscreen: ['document-fullscreen'],
+        catDocumentProtect: ['document-protect'],
+        catPage: ['page'],
+        catSpread: ['spread'],
+        catRotate: ['rotate'],
+        catScroll: ['scroll'],
+        catNavigation: ['navigation'],
+        catPanel: ['panel'],
+        catPanelSidebar: ['panel-sidebar'],
+        catPanelSearch: ['panel-search'],
+        catPanelComment: ['panel-comment'],
+        catTools: ['tools'],
+        catPan: ['pan'],
+        catPointer: ['pointer'],
+        catCapture: ['capture'],
+        catSelection: ['selection'],
+        catSelectionCopy: ['selection-copy'],
+        catHistory: ['history'],
+        catHistoryUndo: ['history-undo'],
+        catHistoryRedo: ['history-redo'],
+    };
+
+    const disabledCategories: string[] = [];
+    for (const [propKey, categories] of Object.entries(categoryMap)) {
+        if (!(props as any)[propKey]) {
+            disabledCategories.push(...categories);
+        }
+    }
+    if (!annotationsEnabled) disabledCategories.push('annotation', 'mode-annotate', 'mode-shapes');
+
     return (
             <div style={{height:"100vh" }} ref={containerRef}>
                 <PDFViewer 
@@ -236,18 +322,18 @@ export function EmbedPDF({ file, activePage, xfdf, onXfdfChange }: EmbedPDFConta
                         log: false,
                         src: file?.value?.uri,
                         theme: {
-                            preference: 'dark'  // 'light' | 'dark' | 'system'
+                            preference: props.themePreference
                         },
                         wasmUrl:  `${window.location.protocol}//${window.location.host}/pdfium.wasm`,
-                        disabledCategories: ['download', 'print', 'export'],
+                        disabledCategories: disabledCategories,
                         i18n: {
                             defaultLocale: 'nl'
                         },
                         annotations: {
-                            enabled: true,
-                            autoCommit: true,
-                            annotationAuthor: 'Mendix User',
-                            selectAfterCreate: true
+                            enabled: annotationsEnabled,
+                            autoCommit: autoCommit,
+                            annotationAuthor: annotationAuthor?.value || 'Mendix User',
+                            selectAfterCreate: selectAfterCreate
                         },
                         documentManager:
                         {

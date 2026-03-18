@@ -12,14 +12,280 @@
                 <caption>File</caption>
                 <description>FileDocument that should be of a compatible document.</description>
             </property>
-        </propertyGroup>
-        <propertyGroup caption="UI">
             <property key="activePage" type="attribute" required="false">
                 <caption>Active page</caption>
                 <description>The current active page number in the document (starting at 0).</description>
                 <attributeTypes>
                     <attributeType name="Integer" />
                 </attributeTypes>
+            </property>
+            <property key="themePreference" type="enumeration" defaultValue="system">
+                <caption>Theme</caption>
+                <description>The color theme for the PDF viewer.</description>
+                <enumerationValues>
+                    <enumerationValue key="light">Light</enumerationValue>
+                    <enumerationValue key="dark">Dark</enumerationValue>
+                    <enumerationValue key="system">System</enumerationValue>
+                </enumerationValues>
+            </property>
+        </propertyGroup>
+        <propertyGroup caption="Features">
+            <propertyGroup caption="Zoom">
+                <property key="catZoom" type="boolean" defaultValue="true">
+                    <caption>Zoom</caption>
+                    <description>Parent category: disables all zoom controls.</description>
+                </property>
+                <property key="catZoomIn" type="boolean" defaultValue="true">
+                    <caption>Zoom in</caption>
+                    <description>zoom-in</description>
+                </property>
+                <property key="catZoomOut" type="boolean" defaultValue="true">
+                    <caption>Zoom out</caption>
+                    <description>zoom-out</description>
+                </property>
+                <property key="catZoomFitPage" type="boolean" defaultValue="true">
+                    <caption>Fit page</caption>
+                    <description>zoom-fit-page</description>
+                </property>
+                <property key="catZoomFitWidth" type="boolean" defaultValue="true">
+                    <caption>Fit width</caption>
+                    <description>zoom-fit-width</description>
+                </property>
+                <property key="catZoomMarquee" type="boolean" defaultValue="true">
+                    <caption>Marquee zoom</caption>
+                    <description>zoom-marquee</description>
+                </property>
+                <property key="catZoomLevel" type="boolean" defaultValue="true">
+                    <caption>Zoom level</caption>
+                    <description>zoom-level</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Annotation">
+                <property key="catAnnotation" type="boolean" defaultValue="true">
+                    <caption>Annotation</caption>
+                    <description>Parent category: disables all annotation UI and the Annotate mode tab.</description>
+                </property>
+                <property key="catAnnotationMarkup" type="boolean" defaultValue="true">
+                    <caption>Markup</caption>
+                    <description>annotation-markup</description>
+                </property>
+                <property key="catAnnotationHighlight" type="boolean" defaultValue="true">
+                    <caption>Highlight</caption>
+                    <description>annotation-highlight</description>
+                </property>
+                <property key="catAnnotationUnderline" type="boolean" defaultValue="true">
+                    <caption>Underline</caption>
+                    <description>annotation-underline</description>
+                </property>
+                <property key="catAnnotationStrikeout" type="boolean" defaultValue="true">
+                    <caption>Strikeout</caption>
+                    <description>annotation-strikeout</description>
+                </property>
+                <property key="catAnnotationSquiggly" type="boolean" defaultValue="true">
+                    <caption>Squiggly</caption>
+                    <description>annotation-squiggly</description>
+                </property>
+                <property key="catAnnotationInk" type="boolean" defaultValue="true">
+                    <caption>Ink</caption>
+                    <description>annotation-ink</description>
+                </property>
+                <property key="catAnnotationText" type="boolean" defaultValue="true">
+                    <caption>Text</caption>
+                    <description>annotation-text</description>
+                </property>
+                <property key="catAnnotationStamp" type="boolean" defaultValue="true">
+                    <caption>Stamp</caption>
+                    <description>annotation-stamp</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Shapes">
+                <property key="catAnnotationShape" type="boolean" defaultValue="true">
+                    <caption>Shape</caption>
+                    <description>Parent category: disables all shape annotation controls and the Shapes mode tab.</description>
+                </property>
+                <property key="catAnnotationRectangle" type="boolean" defaultValue="true">
+                    <caption>Rectangle</caption>
+                    <description>annotation-rectangle</description>
+                </property>
+                <property key="catAnnotationCircle" type="boolean" defaultValue="true">
+                    <caption>Circle</caption>
+                    <description>annotation-circle</description>
+                </property>
+                <property key="catAnnotationLine" type="boolean" defaultValue="true">
+                    <caption>Line</caption>
+                    <description>annotation-line</description>
+                </property>
+                <property key="catAnnotationArrow" type="boolean" defaultValue="true">
+                    <caption>Arrow</caption>
+                    <description>annotation-arrow</description>
+                </property>
+                <property key="catAnnotationPolygon" type="boolean" defaultValue="true">
+                    <caption>Polygon</caption>
+                    <description>annotation-polygon</description>
+                </property>
+                <property key="catAnnotationPolyline" type="boolean" defaultValue="true">
+                    <caption>Polyline</caption>
+                    <description>annotation-polyline</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Redaction">
+                <property key="catRedaction" type="boolean" defaultValue="false">
+                    <caption>Redaction</caption>
+                    <description>Parent category: disables all redaction controls and the Redact mode tab.</description>
+                </property>
+                <property key="catRedactionArea" type="boolean" defaultValue="false">
+                    <caption>Area</caption>
+                    <description>redaction-area</description>
+                </property>
+                <property key="catRedactionText" type="boolean" defaultValue="false">
+                    <caption>Text</caption>
+                    <description>redaction-text</description>
+                </property>
+                <property key="catRedactionApply" type="boolean" defaultValue="false">
+                    <caption>Apply</caption>
+                    <description>redaction-apply</description>
+                </property>
+                <property key="catRedactionClear" type="boolean" defaultValue="false">
+                    <caption>Clear</caption>
+                    <description>redaction-clear</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Document">
+                <property key="catDocument" type="boolean" defaultValue="true">
+                    <caption>Document</caption>
+                    <description>Parent category: disables all document controls.</description>
+                </property>
+                <property key="catDocumentOpen" type="boolean" defaultValue="true">
+                    <caption>Open</caption>
+                    <description>document-open</description>
+                </property>
+                <property key="catDocumentClose" type="boolean" defaultValue="true">
+                    <caption>Close</caption>
+                    <description>document-close</description>
+                </property>
+                <property key="catDocumentPrint" type="boolean" defaultValue="true">
+                    <caption>Print</caption>
+                    <description>document-print</description>
+                </property>
+                <property key="catDocumentCapture" type="boolean" defaultValue="true">
+                    <caption>Capture</caption>
+                    <description>document-capture</description>
+                </property>
+                <property key="catDocumentExport" type="boolean" defaultValue="true">
+                    <caption>Export</caption>
+                    <description>document-export</description>
+                </property>
+                <property key="catDocumentFullscreen" type="boolean" defaultValue="true">
+                    <caption>Fullscreen</caption>
+                    <description>document-fullscreen</description>
+                </property>
+                <property key="catDocumentProtect" type="boolean" defaultValue="true">
+                    <caption>Protect</caption>
+                    <description>document-protect</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Page">
+                <property key="catPage" type="boolean" defaultValue="true">
+                    <caption>Page</caption>
+                    <description>Parent category: disables all page controls.</description>
+                </property>
+                <property key="catSpread" type="boolean" defaultValue="true">
+                    <caption>Spread</caption>
+                    <description>spread</description>
+                </property>
+                <property key="catRotate" type="boolean" defaultValue="true">
+                    <caption>Rotate</caption>
+                    <description>rotate</description>
+                </property>
+                <property key="catScroll" type="boolean" defaultValue="true">
+                    <caption>Scroll</caption>
+                    <description>scroll</description>
+                </property>
+                <property key="catNavigation" type="boolean" defaultValue="true">
+                    <caption>Navigation</caption>
+                    <description>navigation</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Panel">
+                <property key="catPanel" type="boolean" defaultValue="true">
+                    <caption>Panel</caption>
+                    <description>Parent category: disables all panels.</description>
+                </property>
+                <property key="catPanelSidebar" type="boolean" defaultValue="true">
+                    <caption>Sidebar</caption>
+                    <description>panel-sidebar</description>
+                </property>
+                <property key="catPanelSearch" type="boolean" defaultValue="true">
+                    <caption>Search</caption>
+                    <description>panel-search</description>
+                </property>
+                <property key="catPanelComment" type="boolean" defaultValue="true">
+                    <caption>Comment</caption>
+                    <description>panel-comment</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Tools">
+                <property key="catTools" type="boolean" defaultValue="true">
+                    <caption>Tools</caption>
+                    <description>Parent category: disables all tools.</description>
+                </property>
+                <property key="catPan" type="boolean" defaultValue="true">
+                    <caption>Pan</caption>
+                    <description>pan</description>
+                </property>
+                <property key="catPointer" type="boolean" defaultValue="true">
+                    <caption>Pointer</caption>
+                    <description>pointer</description>
+                </property>
+                <property key="catCapture" type="boolean" defaultValue="true">
+                    <caption>Capture</caption>
+                    <description>capture</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Selection">
+                <property key="catSelection" type="boolean" defaultValue="true">
+                    <caption>Selection</caption>
+                    <description>Parent category: disables all selection controls.</description>
+                </property>
+                <property key="catSelectionCopy" type="boolean" defaultValue="true">
+                    <caption>Copy</caption>
+                    <description>selection-copy</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="History">
+                <property key="catHistory" type="boolean" defaultValue="true">
+                    <caption>History</caption>
+                    <description>Parent category: disables all history controls.</description>
+                </property>
+                <property key="catHistoryUndo" type="boolean" defaultValue="true">
+                    <caption>Undo</caption>
+                    <description>history-undo</description>
+                </property>
+                <property key="catHistoryRedo" type="boolean" defaultValue="true">
+                    <caption>Redo</caption>
+                    <description>history-redo</description>
+                </property>
+            </propertyGroup>
+        </propertyGroup>
+        <propertyGroup caption="Annotations">
+            <property key="annotationsEnabled" type="boolean" defaultValue="true">
+                <caption>Enabled</caption>
+                <description>Enable or disable annotations in the viewer.</description>
+            </property>
+            <property key="autoCommit" type="boolean" defaultValue="true">
+                <caption>Auto commit</caption>
+                <description>Automatically commit annotation changes to the PDF document.</description>
+            </property>
+            <property key="annotationAuthor" type="attribute" required="false">
+                <caption>Author</caption>
+                <description>The author name for new annotations.</description>
+                <attributeTypes>
+                    <attributeType name="String" />
+                </attributeTypes>
+            </property>
+            <property key="selectAfterCreate" type="boolean" defaultValue="true">
+                <caption>Select after create</caption>
+                <description>Select the annotation immediately after creation.</description>
             </property>
             <property key="xfdf" type="attribute" required="false">
                 <caption>XFDF</caption>
