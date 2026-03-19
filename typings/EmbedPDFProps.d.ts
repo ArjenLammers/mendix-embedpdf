@@ -17,6 +17,7 @@ export interface EmbedPDFContainerProps {
     file?: DynamicValue<FileValue>;
     activePage?: EditableValue<Big>;
     themePreference: ThemePreferenceEnum;
+    readOnly: boolean;
     catZoom: boolean;
     catZoomIn: boolean;
     catZoomOut: boolean;
@@ -93,6 +94,7 @@ export interface EmbedPDFPreviewProps {
     file: string;
     activePage: string;
     themePreference: ThemePreferenceEnum;
+    readOnly: boolean;
     catZoom: boolean;
     catZoomIn: boolean;
     catZoomOut: boolean;

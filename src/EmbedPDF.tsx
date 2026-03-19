@@ -332,6 +332,45 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
         disabledCategories.push("annotation", "mode-annotate", "mode-shapes");
     }
 
+    // Read-only mode: disable all modification-related categories
+    if (props.readOnly) {
+        disabledCategories.push(
+            "annotation",
+            "mode-annotate",
+            "mode-shapes",
+            "annotation-markup",
+            "annotation-highlight",
+            "annotation-underline",
+            "annotation-strikeout",
+            "annotation-squiggly",
+            "annotation-ink",
+            "annotation-text",
+            "annotation-stamp",
+            "annotation-shape",
+            "annotation-rectangle",
+            "annotation-circle",
+            "annotation-line",
+            "annotation-arrow",
+            "annotation-polygon",
+            "annotation-polyline",
+            "redaction",
+            "mode-redact",
+            "redaction-area",
+            "redaction-text",
+            "redaction-apply",
+            "redaction-clear",
+            "history",
+            "history-undo",
+            "history-redo",
+            "document-open",
+            "document-close",
+            "document-capture",
+            "document-protect"
+        );
+    }
+
+    const effectiveAnnotationsEnabled = props.readOnly ? false : annotationsEnabled;
+
     return (
         <div style={{ height: "100vh" }} ref={containerRef}>
             <PDFViewer
@@ -348,13 +387,19 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                         defaultLocale: "nl"
                     },
                     annotations: {
-                        enabled: annotationsEnabled,
+                        enabled: effectiveAnnotationsEnabled,
                         autoCommit,
                         annotationAuthor: annotationAuthor?.value || "Mendix User",
                         selectAfterCreate
                     },
                     documentManager: {
                         maxDocuments: 1
+                    },
+                    permissions: {
+                        overrides: {
+                            print: !props.catDocumentPrint,
+                            modifyAnnotations: !props.readOnly
+                        }
                     }
                 }}
                 style={{ width: "100%", height: "100%" }}

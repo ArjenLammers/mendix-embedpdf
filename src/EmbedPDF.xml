@@ -28,6 +28,10 @@
                     <enumerationValue key="system">System</enumerationValue>
                 </enumerationValues>
             </property>
+            <property key="readOnly" type="boolean" defaultValue="false">
+                <caption>Read only</caption>
+                <description>When enabled, the viewer is in read-only mode: annotations, redactions, and document modification are disabled.</description>
+            </property>
         </propertyGroup>
         <propertyGroup caption="Features">
             <propertyGroup caption="Zoom">
