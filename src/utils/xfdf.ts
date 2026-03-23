@@ -181,24 +181,30 @@ export function annotationsToXFDF(annotations: Annotation[], documentId?: string
             xfdf += ` flags="${annot.flags.join(",")}"`;
         }
 
-        // Check if we have content or segmentRects to serialize
-        const hasContents = annot.contents;
-        const hasSegmentRects = annot.segmentRects && annot.segmentRects.length > 0;
+        // Text markup annotations need coords attribute per XFDF spec
+        const textMarkupTypes = [9, 10, 11, 12]; // HIGHLIGHT, UNDERLINE, SQUIGGLY, STRIKEOUT
+        const isTextMarkup = textMarkupTypes.includes(annot.type);
+        if (isTextMarkup && annot.segmentRects && annot.segmentRects.length > 0) {
+            // coords contains 8*n values: four (x,y) pairs per quadrilateral
+            // Order per spec: x1,y1 (upper-left), x2,y2 (upper-right), x3,y3 (lower-left), x4,y4 (lower-right)
+            const coordValues = annot.segmentRects
+                .map(r => {
+                    const x = r.origin.x;
+                    const y = r.origin.y;
+                    const x2 = x + r.size.width;
+                    const y2 = y + r.size.height;
+                    return `${x},${y2},${x2},${y2},${x},${y},${x2},${y}`;
+                })
+                .join(",");
+            xfdf += ` coords="${coordValues}"`;
+        }
 
-        if (hasContents || hasSegmentRects) {
+        // Check if we have content to serialize
+        const hasContents = annot.contents;
+
+        if (hasContents) {
             xfdf += ">\n";
-            if (hasContents) {
-                xfdf += `      <contents>${escapeXml(String(annot.contents))}</contents>\n`;
-            }
-            if (hasSegmentRects) {
-                // Serialize segmentRects as custom data
-                const segmentData = annot
-                    .segmentRects!.map(
-                        r => `${r.origin.x},${r.origin.y},${r.origin.x + r.size.width},${r.origin.y + r.size.height}`
-                    )
-                    .join(";");
-                xfdf += `      <segment-rects>${segmentData}</segment-rects>\n`;
-            }
+            xfdf += `      <contents>${escapeXml(String(annot.contents))}</contents>\n`;
             xfdf += `    </${tagName}>\n`;
         } else {
             xfdf += "/>\n";
@@ -327,14 +333,39 @@ export function parseXFDF(xfdfString: string): Annotation[] {
         // Text markup annotations (highlight, underline, squiggly, strikeout) require segmentRects
         const textMarkupTypes = [9, 10, 11, 12]; // HIGHLIGHT, UNDERLINE, SQUIGGLY, STRIKEOUT
         if (textMarkupTypes.includes(typeCode)) {
-            // Try to read segment-rects element first
-            const segmentRectsEl = child.querySelector("segment-rects");
-            if (segmentRectsEl && segmentRectsEl.textContent) {
-                const rectStrings = segmentRectsEl.textContent.split(";").filter(s => s.trim());
-                annotation.segmentRects = rectStrings.map(rectStr => parseRect(rectStr));
-            } else {
-                // Fall back to using the rect as a single segment
-                annotation.segmentRects = [annotation.rect];
+            // Try to read coords attribute first (XFDF spec), then fall back to segment-rects element
+            const coordsAttr = child.getAttribute("coords");
+            if (coordsAttr) {
+                const values = coordsAttr.split(",").map(Number);
+                const quads: Annotation["segmentRects"] = [];
+                // Each quad is 8 values: x1,y1 (upper-left), x2,y2 (upper-right), x3,y3 (lower-left), x4,y4 (lower-right)
+                for (let i = 0; i + 7 < values.length; i += 8) {
+                    const x1 = values[i], y1 = values[i + 1];
+                    const x2 = values[i + 2], y2 = values[i + 3];
+                    const x3 = values[i + 4], y3 = values[i + 5];
+                    const x4 = values[i + 6], y4 = values[i + 7];
+                    const minX = Math.min(x1, x2, x3, x4);
+                    const minY = Math.min(y1, y2, y3, y4);
+                    const maxX = Math.max(x1, x2, x3, x4);
+                    const maxY = Math.max(y1, y2, y3, y4);
+                    quads.push({
+                        origin: { x: minX, y: minY },
+                        size: { width: maxX - minX, height: maxY - minY }
+                    });
+                }
+                if (quads.length > 0) {
+                    annotation.segmentRects = quads;
+                }
+            }
+            if (!annotation.segmentRects) {
+                const segmentRectsEl = child.querySelector("segment-rects");
+                if (segmentRectsEl && segmentRectsEl.textContent) {
+                    const rectStrings = segmentRectsEl.textContent.split(";").filter(s => s.trim());
+                    annotation.segmentRects = rectStrings.map(rectStr => parseRect(rectStr));
+                } else {
+                    // Fall back to using the rect as a single segment
+                    annotation.segmentRects = [annotation.rect];
+                }
             }
 
             // Read strokeColor from stroke-color attribute or fall back to color
