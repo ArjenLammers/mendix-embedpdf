@@ -340,10 +340,14 @@ export function parseXFDF(xfdfString: string): Annotation[] {
                 const quads: Annotation["segmentRects"] = [];
                 // Each quad is 8 values: x1,y1 (upper-left), x2,y2 (upper-right), x3,y3 (lower-left), x4,y4 (lower-right)
                 for (let i = 0; i + 7 < values.length; i += 8) {
-                    const x1 = values[i], y1 = values[i + 1];
-                    const x2 = values[i + 2], y2 = values[i + 3];
-                    const x3 = values[i + 4], y3 = values[i + 5];
-                    const x4 = values[i + 6], y4 = values[i + 7];
+                    const x1 = values[i];
+                    const y1 = values[i + 1];
+                    const x2 = values[i + 2];
+                    const y2 = values[i + 3];
+                    const x3 = values[i + 4];
+                    const y3 = values[i + 5];
+                    const x4 = values[i + 6];
+                    const y4 = values[i + 7];
                     const minX = Math.min(x1, x2, x3, x4);
                     const minY = Math.min(y1, y2, y3, y4);
                     const maxX = Math.max(x1, x2, x3, x4);

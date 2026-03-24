@@ -38,7 +38,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     const pendingImportCount = useRef(0); // Count of annotations being imported
     const pendingDeleteCount = useRef(0); // Count of annotations being deleted
     const importTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Timeout for import completion
-    let listeningToPageChanges = false;
+    const listeningToPageChanges = useRef(false);
 
     // Keep refs in sync with props
     useEffect(() => {
@@ -50,7 +50,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     }, [onXfdfChange]);
 
     useEffect(() => {
-        const sync = async () => {
+        const sync = async (): Promise<void> => {
             const registry = await viewerRef.current?.registry;
             const docManager = registry
                 ?.getPlugin<DocumentManagerPlugin>("document-manager")
@@ -72,20 +72,20 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     }, [file]);
 
     useEffect(() => {
-        if (!listeningToPageChanges && activePage) {
-            const sync = async () => {
+        if (!listeningToPageChanges.current && activePage) {
+            const sync = async (): Promise<void> => {
                 const registry = await viewerRef.current?.registry;
                 const scrollPlugin = registry?.getPlugin<ScrollPlugin>("scroll")?.provides() as ScrollPlugin;
                 scrollPlugin.onPageChange((event: ScrollEvent) => {
                     activePage.setValue(new Big(event.pageNumber));
                 });
-                listeningToPageChanges = true;
+                listeningToPageChanges.current = true;
             };
             sync();
         }
 
         if (activePage?.status === "available") {
-            const sync = async () => {
+            const sync = async (): Promise<void> => {
                 const registry = await viewerRef.current?.registry;
                 const docManager = registry
                     ?.getPlugin<DocumentManagerPlugin>("document-manager")
@@ -113,7 +113,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
      *
      */
 
-    const ready = async () => {
+    const ready = async (): Promise<void> => {
         console.info("PDF Viewer is ready");
         const registry = await viewerRef.current?.registry;
         const documentManager = registry
@@ -144,7 +144,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                 console.info("Annotation event", event);
 
                 // Helper function to start/reset the import timeout
-                const startImportTimeout = () => {
+                const startImportTimeout = (): void => {
                     // Clear existing timeout
                     if (importTimeoutRef.current) {
                         clearTimeout(importTimeoutRef.current);
@@ -162,7 +162,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                 };
 
                 // Helper function to clear the import timeout
-                const clearImportTimeout = () => {
+                const clearImportTimeout = (): void => {
                     if (importTimeoutRef.current) {
                         clearTimeout(importTimeoutRef.current);
                         importTimeoutRef.current = null;
@@ -170,7 +170,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                 };
 
                 // Helper function to serialize XFDF and trigger onChange
-                const serializeAndNotify = () => {
+                const serializeAndNotify = (): void => {
                     if (pendingImportCount.current === 0 && pendingDeleteCount.current === 0) {
                         getAnnotationsAsXFDF(annotationPlugin, documentManager)
                             .then(xfdfString => {
