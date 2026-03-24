@@ -97,7 +97,11 @@ const xfdfTagToTypeCode: Record<string, number> = {
     redact: 26
 };
 
-export function annotationsToXFDF(annotations: Annotation[], documentId?: string): string {
+export function annotationsToXFDF(
+    annotations: Annotation[],
+    documentId?: string,
+    pageSizes?: Record<number, { width: number; height: number }>
+): string {
     const escapeXml = (str: string): string => {
         return str
             .replace(/&/g, "&amp;")
@@ -145,6 +149,7 @@ export function annotationsToXFDF(annotations: Annotation[], documentId?: string
         const tagName = annotationTypeCodeMap[annot.type] || "text";
         const rect = getRectString(annot.rect);
         const pageNum = annot.page ?? annot.pageIndex ?? 0;
+        const pageHeight = pageSizes?.[pageNum]?.height;
 
         xfdf += `    <${tagName}`;
         xfdf += ` page="${pageNum}"`;
@@ -189,11 +194,19 @@ export function annotationsToXFDF(annotations: Annotation[], documentId?: string
             // Order per spec: x1,y1 (upper-left), x2,y2 (upper-right), x3,y3 (lower-left), x4,y4 (lower-right)
             const coordValues = annot.segmentRects
                 .map(r => {
-                    const x = r.origin.x;
-                    const y = r.origin.y;
-                    const x2 = x + r.size.width;
-                    const y2 = y + r.size.height;
-                    return `${x},${y2},${x2},${y2},${x},${y},${x2},${y}`;
+                    const x1 = r.origin.x;
+                    const x2 = x1 + r.size.width;
+                    let yTop: number;
+                    let yBot: number;
+                    if (pageHeight !== undefined) {
+                        // Convert from device coords (y-down) to PDF user space (y-up)
+                        yTop = pageHeight - r.origin.y;
+                        yBot = pageHeight - (r.origin.y + r.size.height);
+                    } else {
+                        yTop = r.origin.y + r.size.height;
+                        yBot = r.origin.y;
+                    }
+                    return `${x1},${yTop},${x2},${yTop},${x1},${yBot},${x2},${yBot}`;
                 })
                 .join(",");
             xfdf += ` coords="${coordValues}"`;
@@ -229,6 +242,12 @@ export async function getAnnotationsAsXFDF(
     const allAnnotations: Annotation[] = [];
     const state: AnnotationDocumentState = annotationPlugin.getState();
 
+    // Build page size lookup from document pages
+    const pageSizes: Record<number, { width: number; height: number }> = {};
+    for (const page of activeDoc.pages) {
+        pageSizes[page.index] = { width: page.size.width, height: page.size.height };
+    }
+
     // state.pages is Record<number, string[]> - page index to array of annotation UIDs
     // state.byUid is Record<string, TrackedAnnotation> - UID to TrackedAnnotation
     for (const [pageIndex, uids] of Object.entries(state.pages)) {
@@ -243,7 +262,7 @@ export async function getAnnotationsAsXFDF(
         }
     }
 
-    return annotationsToXFDF(allAnnotations, activeDoc.id);
+    return annotationsToXFDF(allAnnotations, activeDoc.id, pageSizes);
 }
 
 /**

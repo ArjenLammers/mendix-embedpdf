@@ -17,6 +17,8 @@ import "./ui/EmbedPDF.css";
 import { getAnnotationsAsXFDF, parseXFDF } from "./utils/xfdf";
 import { getGuidFromUrl } from "./utils/url";
 
+declare const __EMBEDPDF_BUILD__: string | undefined;
+
 export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     const {
         file,
@@ -114,6 +116,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
      */
 
     const ready = async (): Promise<void> => {
+        console.info(`EmbedPDF build: ${typeof __EMBEDPDF_BUILD__ !== "undefined" ? __EMBEDPDF_BUILD__ : "dev"}`);
         console.info("PDF Viewer is ready");
         const registry = await viewerRef.current?.registry;
         const documentManager = registry
