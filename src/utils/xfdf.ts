@@ -268,7 +268,10 @@ export async function getAnnotationsAsXFDF(
 /**
  * Parse XFDF string and return annotation objects that can be imported
  */
-export function parseXFDF(xfdfString: string): Annotation[] {
+export function parseXFDF(
+    xfdfString: string,
+    pageSizes?: Record<number, { width: number; height: number }>
+): Annotation[] {
     const annotations: Annotation[] = [];
 
     if (!xfdfString || xfdfString.trim() === "") {
@@ -357,6 +360,7 @@ export function parseXFDF(xfdfString: string): Annotation[] {
             if (coordsAttr) {
                 const values = coordsAttr.split(",").map(Number);
                 const quads: Annotation["segmentRects"] = [];
+                const pH = pageSizes?.[annotation.page!]?.height;
                 // Each quad is 8 values: x1,y1 (upper-left), x2,y2 (upper-right), x3,y3 (lower-left), x4,y4 (lower-right)
                 for (let i = 0; i + 7 < values.length; i += 8) {
                     const x1 = values[i];
@@ -371,10 +375,18 @@ export function parseXFDF(xfdfString: string): Annotation[] {
                     const minY = Math.min(y1, y2, y3, y4);
                     const maxX = Math.max(x1, x2, x3, x4);
                     const maxY = Math.max(y1, y2, y3, y4);
-                    quads.push({
-                        origin: { x: minX, y: minY },
-                        size: { width: maxX - minX, height: maxY - minY }
-                    });
+                    if (pH !== undefined) {
+                        // Reverse y-flip: convert from PDF space (y-up) back to device coords (y-down)
+                        quads.push({
+                            origin: { x: minX, y: pH - maxY },
+                            size: { width: maxX - minX, height: maxY - minY }
+                        });
+                    } else {
+                        quads.push({
+                            origin: { x: minX, y: minY },
+                            size: { width: maxX - minX, height: maxY - minY }
+                        });
+                    }
                 }
                 if (quads.length > 0) {
                     annotation.segmentRects = quads;

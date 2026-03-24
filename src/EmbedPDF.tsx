@@ -197,7 +197,14 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                     if (activeDoc && hasImportedAnnotations.current !== activeDoc.id) {
                         hasImportedAnnotations.current = activeDoc.id;
 
-                        const annotations = parseXFDF(xfdfRef.current.value || "");
+                        const importPageSizes: Record<number, { width: number; height: number }> = {};
+                        for (const pg of activeDoc.pages) {
+                            importPageSizes[pg.index] = {
+                                width: pg.size.width,
+                                height: pg.size.height
+                            };
+                        }
+                        const annotations = parseXFDF(xfdfRef.current.value || "", importPageSizes);
                         if (annotations && annotations.length > 0) {
                             // Remove all existing annotations first
                             const state = annotationPlugin.getState();
