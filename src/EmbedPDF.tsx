@@ -184,7 +184,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
         if (annotationPlugin) {
             console.info("Annotation plugin is available", annotationPlugin);
             annotationPlugin.onAnnotationEvent((event: AnnotationEvent) => {
-                console.info("Annotation event", event);
+                console.debug("Annotation event", event);
 
                 // Helper function to start/reset the import timeout
                 const startImportTimeout = (): void => {
@@ -267,7 +267,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                                 }
                             }
 
-                            console.info("Importing annotations from XFDF:", annotations.length);
+                            console.info("Importing annotations from XFDF:", annotations);
                             try {
                                 // Set counter to track pending imports
                                 pendingImportCount.current = annotations.length;

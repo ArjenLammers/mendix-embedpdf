@@ -18,6 +18,18 @@ export interface Annotation {
     inReplyToId?: string;
     flags?: string[];
     icon?: string;
+    fontSize?: number;
+    fontColor?: string;
+    fontFamily?: number;
+    textAlign?: number;
+    verticalAlign?: number;
+    rotation?: number;
+    unrotatedRect?: { origin: { x: number; y: number }; size: { width: number; height: number } };
+    backgroundColor?: string;
+    intent?: string;
+    calloutLine?: Array<{ x: number; y: number }>;
+    lineEnding?: string;
+    strokeWidth?: number;
     [key: string]: unknown;
 }
 
@@ -82,6 +94,44 @@ const xfdfTagToTypeCode: Record<string, number> = {
     redact: 26
 };
 
+// PdfStandardFont enum values to PDF base font names
+const pdfStandardFontNames: Record<number, string> = {
+    0: "Courier",
+    1: "Courier-Bold",
+    2: "Courier-BoldOblique",
+    3: "Courier-Oblique",
+    4: "Helvetica",
+    5: "Helvetica-Bold",
+    6: "Helvetica-BoldOblique",
+    7: "Helvetica-Oblique",
+    8: "Times-Roman",
+    9: "Times-Bold",
+    10: "Times-BoldItalic",
+    11: "Times-Italic",
+    12: "Symbol",
+    13: "ZapfDingbats"
+};
+
+// Reverse: PDF font name (lowercase) to PdfStandardFont enum value
+const pdfFontNameToCode: Record<string, number> = Object.fromEntries(
+    Object.entries(pdfStandardFontNames).map(([code, name]) => [name.toLowerCase(), parseInt(code, 10)])
+);
+
+function hexToRgbFloats(hex: string): [number, number, number] | null {
+    const match = hex.match(/^#?([0-9a-fA-F]{6})$/);
+    if (!match) return null;
+    return [
+        parseInt(match[1].substring(0, 2), 16) / 255,
+        parseInt(match[1].substring(2, 4), 16) / 255,
+        parseInt(match[1].substring(4, 6), 16) / 255
+    ];
+}
+
+function rgbFloatsToHex(r: number, g: number, b: number): string {
+    const toHex = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0");
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
 export function annotationsToXFDF(
     annotations: Annotation[],
     documentId?: string,
@@ -143,11 +193,15 @@ export function annotationsToXFDF(
             xfdf += ` name="${escapeXml(String(annot.id))}"`;
         }
 
-        if (annot.color) {
-            xfdf += ` color="${escapeXml(String(annot.color))}"`;
-        }
-        if (annot.strokeColor) {
-            xfdf += ` stroke-color="${escapeXml(String(annot.strokeColor))}"`;
+        const isFreeText = tagName === "freetext";
+
+        if (!isFreeText) {
+            if (annot.color) {
+                xfdf += ` color="${escapeXml(String(annot.color))}"`;
+            }
+            if (annot.strokeColor) {
+                xfdf += ` stroke-color="${escapeXml(String(annot.strokeColor))}"`;
+            }
         }
         if (annot.author) {
             xfdf += ` title="${escapeXml(String(annot.author))}"`;
@@ -169,6 +223,40 @@ export function annotationsToXFDF(
         }
         if (annot.flags && annot.flags.length > 0) {
             xfdf += ` flags="${annot.flags.join(",")}"`;
+        }
+
+        // FreeText-specific attributes
+        if (isFreeText) {
+            // XFDF color = border/stroke for freetext
+            if (annot.strokeColor && annot.strokeColor !== "transparent") {
+                xfdf += ` color="${escapeXml(String(annot.strokeColor))}"`;
+            }
+            // interior-color = background/fill
+            const bgColor = annot.color && annot.color !== "transparent" ? annot.color
+                : annot.backgroundColor && annot.backgroundColor !== "transparent" ? annot.backgroundColor
+                : undefined;
+            if (bgColor) {
+                xfdf += ` interior-color="${escapeXml(String(bgColor))}"`;
+            }
+            if (annot.rotation !== undefined && annot.rotation !== 0) {
+                xfdf += ` rotation="${annot.rotation}"`;
+            }
+            if (annot.textAlign !== undefined) {
+                xfdf += ` justification="${annot.textAlign}"`;
+            }
+            if (annot.intent) {
+                xfdf += ` intent="${escapeXml(String(annot.intent))}"`;
+            }
+            if (annot.calloutLine && Array.isArray(annot.calloutLine) && annot.calloutLine.length > 0) {
+                const pts = annot.calloutLine.map((p: { x: number; y: number }) => `${p.x},${p.y}`).join(",");
+                xfdf += ` callout="${pts}"`;
+            }
+            if (annot.lineEnding) {
+                xfdf += ` head="${escapeXml(String(annot.lineEnding))}"`;
+            }
+            if (annot.strokeWidth !== undefined) {
+                xfdf += ` width="${annot.strokeWidth}"`;
+            }
         }
 
         // Text markup annotations need coords attribute per XFDF spec
@@ -197,12 +285,35 @@ export function annotationsToXFDF(
             xfdf += ` coords="${coordValues}"`;
         }
 
-        // Check if we have content to serialize
-        const hasContents = annot.contents;
+        // Build child elements
+        let childContent = "";
 
-        if (hasContents) {
+        if (isFreeText) {
+            // <defaultappearance> with DA string: /FontName size Tf r g b rg
+            const fontName = pdfStandardFontNames[annot.fontFamily as number] ?? "Helvetica";
+            const fontSize = annot.fontSize ?? 12;
+            let daStr = `/${fontName} ${fontSize} Tf`;
+            if (annot.fontColor && typeof annot.fontColor === "string") {
+                const rgb = hexToRgbFloats(annot.fontColor);
+                if (rgb) {
+                    daStr += ` ${rgb[0].toFixed(3)} ${rgb[1].toFixed(3)} ${rgb[2].toFixed(3)} rg`;
+                }
+            }
+            childContent += `      <defaultappearance>${escapeXml(daStr)}</defaultappearance>\n`;
+
+            // Store verticalAlign (not standard XFDF, needed for round-tripping)
+            if (annot.verticalAlign !== undefined) {
+                childContent += `      <defaultstyle>vertical-align:${annot.verticalAlign}</defaultstyle>\n`;
+            }
+        }
+
+        if (annot.contents) {
+            childContent += `      <contents>${escapeXml(String(annot.contents))}</contents>\n`;
+        }
+
+        if (childContent) {
             xfdf += ">\n";
-            xfdf += `      <contents>${escapeXml(String(annot.contents))}</contents>\n`;
+            xfdf += childContent;
             xfdf += `    </${tagName}>\n`;
         } else {
             xfdf += "/>\n";
@@ -442,6 +553,104 @@ export function parseXFDF(
         const flags = child.getAttribute("flags");
         if (flags) {
             annotation.flags = flags.split(",").map(f => f.trim());
+        }
+
+        // FreeText-specific import
+        if (typeCode === 3) {
+            // In XFDF, color = border for freetext; fix the generic mapping
+            if (annotation.color) {
+                annotation.strokeColor = annotation.color;
+            }
+            // interior-color = background/fill
+            const interiorColor = child.getAttribute("interior-color");
+            if (interiorColor) {
+                annotation.color = unescapeXml(interiorColor);
+                annotation.backgroundColor = unescapeXml(interiorColor);
+            } else {
+                annotation.color = "transparent";
+                annotation.backgroundColor = "transparent";
+            }
+
+            // rotation
+            const rotation = child.getAttribute("rotation");
+            if (rotation) {
+                annotation.rotation = parseFloat(rotation);
+            }
+
+            // justification → textAlign
+            const justification = child.getAttribute("justification");
+            if (justification) {
+                annotation.textAlign = parseInt(justification, 10);
+            }
+
+            // intent
+            const intent = child.getAttribute("intent");
+            if (intent) {
+                annotation.intent = unescapeXml(intent);
+            }
+
+            // callout line points
+            const callout = child.getAttribute("callout");
+            if (callout) {
+                const vals = callout.split(",").map(Number);
+                const points: Array<{ x: number; y: number }> = [];
+                for (let i = 0; i + 1 < vals.length; i += 2) {
+                    points.push({ x: vals[i], y: vals[i + 1] });
+                }
+                if (points.length > 0) {
+                    annotation.calloutLine = points;
+                }
+            }
+
+            // line ending
+            const head = child.getAttribute("head");
+            if (head) {
+                annotation.lineEnding = unescapeXml(head);
+            }
+
+            // stroke width
+            const width = child.getAttribute("width");
+            if (width) {
+                annotation.strokeWidth = parseFloat(width);
+            }
+
+            // Parse <defaultappearance> → fontFamily, fontSize, fontColor
+            const daEl = child.querySelector("defaultappearance");
+            if (daEl && daEl.textContent) {
+                const da = daEl.textContent;
+                const fontMatch = da.match(/\/(\S+)\s+([\d.]+)\s+Tf/);
+                if (fontMatch) {
+                    const fontCode = pdfFontNameToCode[fontMatch[1].toLowerCase()];
+                    annotation.fontFamily = fontCode !== undefined ? fontCode : 4;
+                    annotation.fontSize = parseFloat(fontMatch[2]);
+                }
+                const colorMatch = da.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/);
+                if (colorMatch) {
+                    annotation.fontColor = rgbFloatsToHex(
+                        parseFloat(colorMatch[1]),
+                        parseFloat(colorMatch[2]),
+                        parseFloat(colorMatch[3])
+                    );
+                }
+            }
+
+            // Parse <defaultstyle> for verticalAlign
+            const dsEl = child.querySelector("defaultstyle");
+            if (dsEl && dsEl.textContent) {
+                const vaMatch = dsEl.textContent.match(/vertical-align:\s*(\d+)/);
+                if (vaMatch) {
+                    annotation.verticalAlign = parseInt(vaMatch[1], 10);
+                }
+            }
+
+            // Ensure required FreeText fields have defaults
+            if (annotation.fontFamily === undefined) annotation.fontFamily = 4; // Helvetica
+            if (annotation.fontSize === undefined) annotation.fontSize = 12;
+            if (!annotation.fontColor) annotation.fontColor = "#000000";
+            if (annotation.textAlign === undefined) annotation.textAlign = 0; // Left
+            if (annotation.verticalAlign === undefined) annotation.verticalAlign = 0; // Top
+            if (annotation.opacity === undefined) annotation.opacity = 1;
+            if (annotation.contents === undefined) annotation.contents = "";
         }
 
         annotations.push(annotation);
