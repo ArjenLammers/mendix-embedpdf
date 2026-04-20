@@ -1,19 +1,4 @@
-import { AnnotationPlugin, DocumentManagerPlugin } from "@embedpdf/react-pdf-viewer";
-
-interface TrackedAnnotation {
-    commitState: string;
-    object: Annotation;
-    dictMode?: boolean;
-}
-
-interface AnnotationDocumentState {
-    pages: Record<number, string[]>;
-    byUid: Record<string, TrackedAnnotation>;
-    selectedUids: string[];
-    selectedUid: string | null;
-    activeToolId: string | null;
-    hasPendingChanges: boolean;
-}
+import { AnnotationPlugin, DocumentManagerPlugin, type AnnotationTransferItem } from "@embedpdf/react-pdf-viewer";
 
 export interface Annotation {
     id: string;
@@ -239,28 +224,27 @@ export async function getAnnotationsAsXFDF(
         throw new Error("No active document");
     }
 
-    const allAnnotations: Annotation[] = [];
-    const state: AnnotationDocumentState = annotationPlugin.getState();
-
     // Build page size lookup from document pages
     const pageSizes: Record<number, { width: number; height: number }> = {};
     for (const page of activeDoc.pages) {
         pageSizes[page.index] = { width: page.size.width, height: page.size.height };
     }
 
-    // state.pages is Record<number, string[]> - page index to array of annotation UIDs
-    // state.byUid is Record<string, TrackedAnnotation> - UID to TrackedAnnotation
-    for (const [pageIndex, uids] of Object.entries(state.pages)) {
-        for (const uid of uids) {
-            const tracked = state.byUid[uid];
-            if (tracked?.object) {
-                allAnnotations.push({
-                    ...tracked.object,
-                    page: Number(pageIndex)
-                } as Annotation);
-            }
-        }
-    }
+    // Use the documented exportAnnotations() API
+    const items = await new Promise<AnnotationTransferItem[]>((resolve, reject) => {
+        annotationPlugin.exportAnnotations().wait(
+            (exportedItems: AnnotationTransferItem[]) => resolve(exportedItems),
+            (error: unknown) => reject(error)
+        );
+    });
+
+    const allAnnotations: Annotation[] = items.map(item => {
+        const annot = item.annotation as any;
+        return {
+            ...annot,
+            page: annot.pageIndex ?? annot.page ?? 0
+        } as Annotation;
+    });
 
     return annotationsToXFDF(allAnnotations, activeDoc.id, pageSizes);
 }

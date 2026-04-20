@@ -101,6 +101,22 @@
                     <caption>Stamp</caption>
                     <description>annotation-stamp</description>
                 </property>
+                <property key="catAnnotationStyle" type="boolean" defaultValue="true">
+                    <caption>Annotation style</caption>
+                    <description>Disables the annotation style panel button in the annotation, shapes, and redaction toolbars, and the style option in the annotation selection menu.</description>
+                </property>
+                <property key="catAnnotationInsertText" type="boolean" defaultValue="false">
+                    <caption>Insert text</caption>
+                    <description>annotation-insert-text</description>
+                </property>
+                <property key="catAnnotationReplaceText" type="boolean" defaultValue="false">
+                    <caption>Replace text</caption>
+                    <description>annotation-replace-text</description>
+                </property>
+                <property key="catAnnotationCallout" type="boolean" defaultValue="false">
+                    <caption>Callout</caption>
+                    <description>Hides the callout annotation button (uses CSS-based hiding since callout shares the annotation-text category with Text).</description>
+                </property>
             </propertyGroup>
             <propertyGroup caption="Shapes">
                 <property key="catAnnotationShape" type="boolean" defaultValue="true">

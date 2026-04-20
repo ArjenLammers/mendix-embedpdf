@@ -34,6 +34,10 @@ export interface EmbedPDFContainerProps {
     catAnnotationInk: boolean;
     catAnnotationText: boolean;
     catAnnotationStamp: boolean;
+    catAnnotationStyle: boolean;
+    catAnnotationInsertText: boolean;
+    catAnnotationReplaceText: boolean;
+    catAnnotationCallout: boolean;
     catAnnotationShape: boolean;
     catAnnotationRectangle: boolean;
     catAnnotationCircle: boolean;
@@ -111,6 +115,10 @@ export interface EmbedPDFPreviewProps {
     catAnnotationInk: boolean;
     catAnnotationText: boolean;
     catAnnotationStamp: boolean;
+    catAnnotationStyle: boolean;
+    catAnnotationInsertText: boolean;
+    catAnnotationReplaceText: boolean;
+    catAnnotationCallout: boolean;
     catAnnotationShape: boolean;
     catAnnotationRectangle: boolean;
     catAnnotationCircle: boolean;

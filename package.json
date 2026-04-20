@@ -11,7 +11,7 @@
   "license": "MIT",
   "config": {
     "projectPath": "D:\\projects\\EmbedPDF-main",
-    "mendixHost": "http://localhost:8080",
+    "mendixHost": "http://localhost:9080",
     "developmentPort": 3000
   },
   "packagePath": "mendix",
@@ -29,7 +29,7 @@
     "@types/big.js": "^6.0.2"
   },
   "dependencies": {
-    "@embedpdf/react-pdf-viewer": "^2.7.0",
+    "@embedpdf/react-pdf-viewer": "^2.14.0",
     "classnames": "^2.2.6"
   },
   "resolutions": {

@@ -10,8 +10,11 @@ import {
     ScrollEvent,
     DocumentManagerPlugin,
     ScrollPlugin,
-    AnnotationEvent
+    AnnotationEvent,
+    UIPlugin,
+    type AnnotationTransferItem
 } from "@embedpdf/react-pdf-viewer";
+
 
 import "./ui/EmbedPDF.css";
 import { getAnnotationsAsXFDF, parseXFDF } from "./utils/xfdf";
@@ -124,6 +127,43 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
             ?.provides() as DocumentManagerPlugin;
 
         const annotationPlugin = registry?.getPlugin<AnnotationPlugin>("annotation")?.provides() as AnnotationPlugin;
+
+        // Hide callout button by removing it from the UI schema
+        // (callout shares the "annotation-text" category with Text, so disabledCategories can't target it alone)
+        // removeFromSchema doesn't filter items inside groups, so we do a deep filter here.
+        if (!props.catAnnotationCallout) {
+            const uiPlugin = registry?.getPlugin<UIPlugin>("ui")?.provides();
+            if (uiPlugin) {
+                const schema = uiPlugin.getSchema();
+                const commandId = "annotation:add-callout";
+
+                const filterItems = (items: any[]): any[] =>
+                    items
+                        .map(item => {
+                            if (item.type === "group" && item.items) {
+                                return { ...item, items: item.items.filter((c: any) => c.commandId !== commandId) };
+                            }
+                            if (item.type === "section" && item.items) {
+                                return { ...item, items: item.items.filter((c: any) => c.commandId !== commandId) };
+                            }
+                            return item;
+                        })
+                        .filter(item => {
+                            if ((item.type === "command-button" || item.type === "command") && item.commandId === commandId) return false;
+                            return true;
+                        });
+
+                const toolbars: Record<string, any> = {};
+                for (const [id, toolbar] of Object.entries(schema.toolbars)) {
+                    toolbars[id] = { ...toolbar, items: filterItems((toolbar as any).items) };
+                }
+                const menus: Record<string, any> = {};
+                for (const [id, menu] of Object.entries(schema.menus)) {
+                    menus[id] = { ...menu, items: filterItems((menu as any).items) };
+                }
+                uiPlugin.mergeSchema({ toolbars, menus } as any);
+            }
+        }
 
         // Track when a new document is opened (import will happen after 'loaded' event)
         if (documentManager) {
@@ -292,6 +332,9 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
         catAnnotationInk: ["annotation-ink"],
         catAnnotationText: ["annotation-text"],
         catAnnotationStamp: ["annotation-stamp"],
+        catAnnotationStyle: ["annotation-style", "panel-annotation-style"],
+        catAnnotationInsertText: ["annotation-insert-text"],
+        catAnnotationReplaceText: ["annotation-replace-text"],
         catAnnotationShape: ["annotation-shape", "mode-shapes"],
         catAnnotationRectangle: ["annotation-rectangle"],
         catAnnotationCircle: ["annotation-circle"],
