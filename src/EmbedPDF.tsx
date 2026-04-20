@@ -11,10 +11,8 @@ import {
     DocumentManagerPlugin,
     ScrollPlugin,
     AnnotationEvent,
-    UIPlugin,
-    type AnnotationTransferItem
+    UIPlugin
 } from "@embedpdf/react-pdf-viewer";
-
 
 import "./ui/EmbedPDF.css";
 import { getAnnotationsAsXFDF, parseXFDF } from "./utils/xfdf";
@@ -149,17 +147,22 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                             return item;
                         })
                         .filter(item => {
-                            if ((item.type === "command-button" || item.type === "command") && item.commandId === commandId) return false;
+                            if (
+                                (item.type === "command-button" || item.type === "command") &&
+                                item.commandId === commandId
+                            ) {
+                                return false;
+                            }
                             return true;
                         });
 
                 const toolbars: Record<string, any> = {};
                 for (const [id, toolbar] of Object.entries(schema.toolbars)) {
-                    toolbars[id] = { ...toolbar, items: filterItems((toolbar as any).items) };
+                    toolbars[id] = { ...(toolbar as any), items: filterItems((toolbar as any).items) };
                 }
                 const menus: Record<string, any> = {};
                 for (const [id, menu] of Object.entries(schema.menus)) {
-                    menus[id] = { ...menu, items: filterItems((menu as any).items) };
+                    menus[id] = { ...(menu as any), items: filterItems((menu as any).items) };
                 }
                 uiPlugin.mergeSchema({ toolbars, menus } as any);
             }

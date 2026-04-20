@@ -119,7 +119,9 @@ const pdfFontNameToCode: Record<string, number> = Object.fromEntries(
 
 function hexToRgbFloats(hex: string): [number, number, number] | null {
     const match = hex.match(/^#?([0-9a-fA-F]{6})$/);
-    if (!match) return null;
+    if (!match) {
+        return null;
+    }
     return [
         parseInt(match[1].substring(0, 2), 16) / 255,
         parseInt(match[1].substring(2, 4), 16) / 255,
@@ -128,7 +130,10 @@ function hexToRgbFloats(hex: string): [number, number, number] | null {
 }
 
 function rgbFloatsToHex(r: number, g: number, b: number): string {
-    const toHex = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0");
+    const toHex = (v: number) =>
+        Math.round(Math.min(1, Math.max(0, v)) * 255)
+            .toString(16)
+            .padStart(2, "0");
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
@@ -232,9 +237,12 @@ export function annotationsToXFDF(
                 xfdf += ` color="${escapeXml(String(annot.strokeColor))}"`;
             }
             // interior-color = background/fill
-            const bgColor = annot.color && annot.color !== "transparent" ? annot.color
-                : annot.backgroundColor && annot.backgroundColor !== "transparent" ? annot.backgroundColor
-                : undefined;
+            const bgColor =
+                annot.color && annot.color !== "transparent"
+                    ? annot.color
+                    : annot.backgroundColor && annot.backgroundColor !== "transparent"
+                    ? annot.backgroundColor
+                    : undefined;
             if (bgColor) {
                 xfdf += ` interior-color="${escapeXml(String(bgColor))}"`;
             }
@@ -644,13 +652,27 @@ export function parseXFDF(
             }
 
             // Ensure required FreeText fields have defaults
-            if (annotation.fontFamily === undefined) annotation.fontFamily = 4; // Helvetica
-            if (annotation.fontSize === undefined) annotation.fontSize = 12;
-            if (!annotation.fontColor) annotation.fontColor = "#000000";
-            if (annotation.textAlign === undefined) annotation.textAlign = 0; // Left
-            if (annotation.verticalAlign === undefined) annotation.verticalAlign = 0; // Top
-            if (annotation.opacity === undefined) annotation.opacity = 1;
-            if (annotation.contents === undefined) annotation.contents = "";
+            if (annotation.fontFamily === undefined) {
+                annotation.fontFamily = 4;
+            } // Helvetica
+            if (annotation.fontSize === undefined) {
+                annotation.fontSize = 12;
+            }
+            if (!annotation.fontColor) {
+                annotation.fontColor = "#000000";
+            }
+            if (annotation.textAlign === undefined) {
+                annotation.textAlign = 0;
+            } // Left
+            if (annotation.verticalAlign === undefined) {
+                annotation.verticalAlign = 0;
+            } // Top
+            if (annotation.opacity === undefined) {
+                annotation.opacity = 1;
+            }
+            if (annotation.contents === undefined) {
+                annotation.contents = "";
+            }
         }
 
         annotations.push(annotation);
