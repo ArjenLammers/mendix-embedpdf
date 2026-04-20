@@ -148,6 +148,54 @@
                     <description>annotation-polyline</description>
                 </property>
             </propertyGroup>
+            <propertyGroup caption="Form">
+                <property key="catForm" type="boolean" defaultValue="true">
+                    <caption>Form</caption>
+                    <description>Parent category: disables all form controls.</description>
+                </property>
+                <property key="catFormTextfield" type="boolean" defaultValue="true">
+                    <caption>Text field</caption>
+                    <description>form-textfield</description>
+                </property>
+                <property key="catFormCheckbox" type="boolean" defaultValue="true">
+                    <caption>Checkbox</caption>
+                    <description>form-checkbox</description>
+                </property>
+                <property key="catFormRadio" type="boolean" defaultValue="true">
+                    <caption>Radio</caption>
+                    <description>form-radio</description>
+                </property>
+                <property key="catFormSelect" type="boolean" defaultValue="true">
+                    <caption>Select</caption>
+                    <description>form-select</description>
+                </property>
+                <property key="catFormListbox" type="boolean" defaultValue="true">
+                    <caption>Listbox</caption>
+                    <description>form-listbox</description>
+                </property>
+                <property key="catFormFillMode" type="boolean" defaultValue="true">
+                    <caption>Fill mode</caption>
+                    <description>form-fill-mode</description>
+                </property>
+            </propertyGroup>
+            <propertyGroup caption="Insert">
+                <property key="catInsert" type="boolean" defaultValue="true">
+                    <caption>Insert</caption>
+                    <description>Parent category: disables all insert controls.</description>
+                </property>
+                <property key="catInsertRubberStamp" type="boolean" defaultValue="true">
+                    <caption>Rubber stamp</caption>
+                    <description>insert-rubber-stamp</description>
+                </property>
+                <property key="catInsertSignature" type="boolean" defaultValue="true">
+                    <caption>Signature</caption>
+                    <description>insert-signature</description>
+                </property>
+                <property key="catInsertImage" type="boolean" defaultValue="true">
+                    <caption>Image</caption>
+                    <description>insert-image</description>
+                </property>
+            </propertyGroup>
             <propertyGroup caption="Redaction">
                 <property key="catRedaction" type="boolean" defaultValue="false">
                     <caption>Redaction</caption>
