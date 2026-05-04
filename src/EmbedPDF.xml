@@ -99,7 +99,7 @@
                 </property>
                 <property key="catAnnotationStamp" type="boolean" defaultValue="true">
                     <caption>Stamp</caption>
-                    <description>annotation-stamp</description>
+                    <description>annotation-stamp, stamp</description>
                 </property>
                 <property key="catAnnotationStyle" type="boolean" defaultValue="true">
                     <caption>Annotation style</caption>

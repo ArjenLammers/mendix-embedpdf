@@ -20,6 +20,27 @@ import { getGuidFromUrl } from "./utils/url";
 
 declare const __EMBEDPDF_BUILD__: string | undefined;
 
+const resolveUri = async (uri: unknown): Promise<string | null> => {
+    if (!uri) {
+        return null;
+    }
+
+    if (typeof uri === "string") {
+        return uri;
+    }
+
+    if (typeof (uri as PromiseLike<string>).then === "function") {
+        try {
+            return await (uri as Promise<string>);
+        } catch (error) {
+            console.error("Error resolving file URI promise:", error);
+            return null;
+        }
+    }
+
+    return null;
+};
+
 export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     const {
         file,
@@ -58,15 +79,18 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
             const docManager = registry
                 ?.getPlugin<DocumentManagerPlugin>("document-manager")
                 ?.provides() as DocumentManagerPlugin;
-            const fileGuid = file?.value?.uri ? getGuidFromUrl(file.value.uri) : null;
-            if (file?.value?.uri && fileGuid && fileGuid !== currentDocumentGuid.current) {
-                console.info("Opening document", file.value.uri, "GUID:", fileGuid);
+            const uri = await resolveUri(file?.value?.uri);
+            console.info("File prop changed, URI:", uri);
+
+            const fileGuid = uri ? getGuidFromUrl(uri) : null;
+            if (uri && fileGuid && fileGuid !== currentDocumentGuid.current) {
+                console.info("Opening document", uri, "GUID:", fileGuid);
                 currentDocumentGuid.current = fileGuid;
                 // Reset import tracking when opening a new document
                 hasImportedAnnotations.current = null;
                 await docManager.closeAllDocuments().toPromise();
                 docManager.openDocumentUrl({
-                    url: file?.value?.uri || "",
+                    url: uri,
                     autoActivate: true
                 });
             }
@@ -334,7 +358,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
         catAnnotationSquiggly: ["annotation-squiggly"],
         catAnnotationInk: ["annotation-ink"],
         catAnnotationText: ["annotation-text"],
-        catAnnotationStamp: ["annotation-stamp"],
+        catAnnotationStamp: ["annotation-stamp", "stamp"],
         catAnnotationStyle: ["annotation-style", "panel-annotation-style"],
         catAnnotationInsertText: ["annotation-insert-text"],
         catAnnotationReplaceText: ["annotation-replace-text"],
@@ -444,7 +468,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                 ref={viewerRef}
                 config={{
                     log: false,
-                    src: file?.value?.uri,
+                    src: typeof file?.value?.uri === "string" ? file.value.uri : undefined,
                     theme: {
                         preference: props.themePreference
                     },
