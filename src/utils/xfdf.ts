@@ -163,12 +163,23 @@ export function annotationsToXFDF(
         ).padStart(2, "0")}`;
     };
 
-    const getRectString = (rect: Annotation["rect"]): string => {
+    const getRectString = (rect: Annotation["rect"], pageHeight?: number, annotationType?: number): string => {
         if (!rect?.origin || !rect?.size) {
             return "0,0,0,0";
         }
         const { x, y } = rect.origin;
         const { width, height } = rect.size;
+        
+        // For FreeText and other annotations, convert from device coords (y-down) to PDF user space (y-up)
+        const isFreeText = annotationType === 3;
+        if (isFreeText && pageHeight !== undefined) {
+            // In PDF space (y-up): y1 is bottom, y2 is top
+            const y1 = pageHeight - (y + height);  // bottom in PDF space
+            const y2 = pageHeight - y;              // top in PDF space
+            return `${x},${y1},${x + width},${y2}`;
+        }
+        
+        // For other annotation types without pageHeight, use original coordinates
         return `${x},${y},${x + width},${y + height}`;
     };
 
@@ -187,9 +198,9 @@ export function annotationsToXFDF(
         }
 
         const tagName = annotationTypeCodeMap[annot.type] || "text";
-        const rect = getRectString(annot.rect);
         const pageNum = annot.page ?? annot.pageIndex ?? 0;
         const pageHeight = pageSizes?.[pageNum]?.height;
+        const rect = getRectString(annot.rect, pageHeight, annot.type);
 
         xfdf += `    <${tagName}`;
         xfdf += ` page="${pageNum}"`;
@@ -301,14 +312,21 @@ export function annotationsToXFDF(
             const fontName = pdfStandardFontNames[annot.fontFamily as number] ?? "Helvetica";
             const fontSize = annot.fontSize ?? 12;
             let daStr = `/${fontName} ${fontSize} Tf`;
-            if (annot.fontColor && typeof annot.fontColor === "string") {
-                const rgb = hexToRgbFloats(annot.fontColor);
+            // Always include text color - use fontColor if available, otherwise black
+            let fontColorToUse = annot.fontColor;
+            if (!fontColorToUse) {
+                // If fontColor not set, default to black
+                fontColorToUse = "#000000";
+            }
+            
+            if (fontColorToUse && typeof fontColorToUse === "string") {
+                const rgb = hexToRgbFloats(fontColorToUse);
                 if (rgb) {
                     daStr += ` ${rgb[0].toFixed(3)} ${rgb[1].toFixed(3)} ${rgb[2].toFixed(3)} rg`;
                 }
             }
-            childContent += `      <defaultappearance>${escapeXml(daStr)}</defaultappearance>\n`;
 
+            childContent += `      <defaultappearance>${escapeXml(daStr)}</defaultappearance>\n`;
             // Store verticalAlign (not standard XFDF, needed for round-tripping)
             if (annot.verticalAlign !== undefined) {
                 childContent += `      <defaultstyle>vertical-align:${annot.verticalAlign}</defaultstyle>\n`;
@@ -425,12 +443,28 @@ export function parseXFDF(
         return undefined;
     };
 
-    const parseRect = (rectStr: string): Annotation["rect"] => {
+    const parseRect = (rectStr: string, pageHeight?: number, isFreeText?: boolean): Annotation["rect"] => {
         const parts = rectStr.split(",").map(Number);
         if (parts.length !== 4) {
             return { origin: { x: 0, y: 0 }, size: { width: 0, height: 0 } };
         }
         const [x1, y1, x2, y2] = parts;
+        
+        // For FreeText annotations, convert from PDF coords (y-up) back to device coords (y-down)
+        if (isFreeText && pageHeight !== undefined) {
+            // In PDF space: y1 is bottom, y2 is top
+            // Convert back to device coords (y-down)
+            const yBottom = y1;  // bottom in PDF space
+            const yTop = y2;     // top in PDF space
+            const yOrigin = pageHeight - yTop;    // top in device coords
+            const ySize = yTop - yBottom;        // height
+            return {
+                origin: { x: x1, y: yOrigin },
+                size: { width: x2 - x1, height: ySize }
+            };
+        }
+        
+        // For other annotation types, use original parsing
         return {
             origin: { x: x1, y: y1 },
             size: { width: x2 - x1, height: y2 - y1 }
@@ -452,7 +486,7 @@ export function parseXFDF(
             type: typeCode,
             page: parseInt(child.getAttribute("page") || "0", 10),
             pageIndex: parseInt(child.getAttribute("page") || "0", 10),
-            rect: parseRect(child.getAttribute("rect") || "0,0,0,0")
+            rect: parseRect(child.getAttribute("rect") || "0,0,0,0", pageSizes?.[parseInt(child.getAttribute("page") || "0", 10)]?.height, typeCode === 3)
         };
 
         // Text markup annotations (highlight, underline, squiggly, strikeout) require segmentRects
