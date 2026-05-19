@@ -243,16 +243,25 @@ export function annotationsToXFDF(
 
         // FreeText-specific attributes
         if (isFreeText) {
-            // XFDF color = border/stroke for freetext
-            if (annot.strokeColor && annot.strokeColor !== "transparent") {
-                xfdf += ` color="${escapeXml(String(annot.strokeColor))}"`;
+            // XFDF color = border/stroke for freetext.
+            // PDFBox derives the border color from the DA string's rg color if /C is not
+            // explicitly set. Always emit an explicit color to prevent this: use the real
+            // border color when a border is intended, otherwise white to force a transparent-
+            // looking border that won't show the font color.
+            const hasBorder = annot.strokeWidth !== undefined && annot.strokeWidth > 0;
+            const borderColor = annot.strokeColor && annot.strokeColor !== "transparent"
+                ? annot.strokeColor
+                : undefined;
+            if (hasBorder && borderColor && borderColor.toLowerCase() !== annot.fontColor?.toLowerCase()) {
+                xfdf += ` color="${escapeXml(String(borderColor))}"`;
             }
+
             // interior-color = background/fill
             const bgColor =
-                annot.color && annot.color !== "transparent"
-                    ? annot.color
-                    : annot.backgroundColor && annot.backgroundColor !== "transparent"
+                annot.backgroundColor && annot.backgroundColor !== "transparent"
                     ? annot.backgroundColor
+                    : annot.color && annot.color !== "transparent" && annot.color.toLowerCase() !== annot.fontColor?.toLowerCase()
+                    ? annot.color
                     : undefined;
             if (bgColor) {
                 xfdf += ` interior-color="${escapeXml(String(bgColor))}"`;
@@ -273,9 +282,8 @@ export function annotationsToXFDF(
             if (annot.lineEnding) {
                 xfdf += ` head="${escapeXml(String(annot.lineEnding))}"`;
             }
-            if (annot.strokeWidth !== undefined) {
-                xfdf += ` width="${annot.strokeWidth}"`;
-            }
+            // Always emit width; default to 0 (no border) when not explicitly set
+            xfdf += ` width="${annot.strokeWidth !== undefined && annot.strokeWidth > 0 ? annot.strokeWidth : 0}"`;
         }
 
         // Text markup annotations need coords attribute per XFDF spec
@@ -312,25 +320,27 @@ export function annotationsToXFDF(
             const fontName = pdfStandardFontNames[annot.fontFamily as number] ?? "Helvetica";
             const fontSize = annot.fontSize ?? 12;
             let daStr = `/${fontName} ${fontSize} Tf`;
-            // Always include text color - use fontColor if available, otherwise black
-            let fontColorToUse = annot.fontColor;
-            if (!fontColorToUse) {
-                // If fontColor not set, default to black
-                fontColorToUse = "#000000";
-            }
-            
-            if (fontColorToUse && typeof fontColorToUse === "string") {
-                const rgb = hexToRgbFloats(fontColorToUse);
+            if (annot.fontColor && typeof annot.fontColor === "string") {
+                const rgb = hexToRgbFloats(annot.fontColor);
                 if (rgb) {
                     daStr += ` ${rgb[0].toFixed(3)} ${rgb[1].toFixed(3)} ${rgb[2].toFixed(3)} rg`;
                 }
             }
-
             childContent += `      <defaultappearance>${escapeXml(daStr)}</defaultappearance>\n`;
-            // Store verticalAlign (not standard XFDF, needed for round-tripping)
+            // <defaultstyle> maps to /DS — Adobe Reader uses this for text styling
+            const dsFontFamily = fontName.replace("-", ",") + ",sans-serif";
+            const dsColor = annot.fontColor || "#000000";
+            const dsAlign = annot.textAlign === 1 ? "center" : annot.textAlign === 2 ? "right" : "left";
+            let dsStr = `font: ${dsFontFamily} ${fontSize}.0pt; text-align:${dsAlign}; color:${dsColor}`;
             if (annot.verticalAlign !== undefined) {
-                childContent += `      <defaultstyle>vertical-align:${annot.verticalAlign}</defaultstyle>\n`;
+                dsStr += `; vertical-align:${annot.verticalAlign}`;
             }
+            childContent += `      <defaultstyle>${escapeXml(dsStr)}</defaultstyle>\n`;
+            // <body> rich text maps to /RC — Adobe Reader uses this to render text
+            const rcColor = dsColor;
+            const rcFontFamily = fontName;
+            const rcContents = annot.contents ? escapeXml(String(annot.contents)) : "";
+            childContent += `      <body xmlns="http://www.w3.org/1999/xhtml" xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/" xfa:spec="2.0.2" style="font-size:${fontSize}.0pt;text-align:${dsAlign};color:${rcColor};font-weight:normal;font-style:normal;font-family:${rcFontFamily},sans-serif;font-stretch:normal"><p dir="ltr"><span style="font-family:${rcFontFamily};color:${rcColor}">${rcContents}</span></p></body>\n`;
         }
 
         if (annot.contents) {
