@@ -1,3 +1,24 @@
+export const resolveUri = async (uri: unknown): Promise<string | null> => {
+    if (!uri) {
+        return null;
+    }
+
+    if (typeof uri === "string") {
+        return uri;
+    }
+
+    if (typeof (uri as PromiseLike<string>).then === "function") {
+        try {
+            return await (uri as Promise<string>);
+        } catch (error) {
+            console.error("Error resolving file URI promise:", error);
+            return null;
+        }
+    }
+
+    return null;
+};
+
 /**
  * Extract GUID from file URL
  */

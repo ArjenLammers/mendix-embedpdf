@@ -16,30 +16,10 @@ import {
 
 import "./ui/EmbedPDF.css";
 import { getAnnotationsAsXFDF, parseXFDF } from "./utils/xfdf";
-import { getGuidFromUrl } from "./utils/url";
+import { getGuidFromUrl, resolveUri } from "./utils/url";
+import { getDisabledCategories } from "./utils/categories";
 
 declare const __EMBEDPDF_BUILD__: string | undefined;
-
-const resolveUri = async (uri: unknown): Promise<string | null> => {
-    if (!uri) {
-        return null;
-    }
-
-    if (typeof uri === "string") {
-        return uri;
-    }
-
-    if (typeof (uri as PromiseLike<string>).then === "function") {
-        try {
-            return await (uri as Promise<string>);
-        } catch (error) {
-            console.error("Error resolving file URI promise:", error);
-            return null;
-        }
-    }
-
-    return null;
-};
 
 export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     const {
@@ -98,6 +78,9 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
         sync();
     }, [file]);
 
+    /**
+     * Scroll the viewer to the active page when it changes.
+     */
     useEffect(() => {
         if (activePage?.status === "available") {
             const sync = async (): Promise<void> => {
@@ -110,7 +93,9 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                     return; // No active document yet, skip scrolling
                 }
                 const scrollPlugin = registry?.getPlugin<ScrollPlugin>("scroll")?.provides() as ScrollPlugin;
-                if (!scrollPlugin) return;
+                if (!scrollPlugin) {
+                    return;
+                }
                 scrollPlugin.scrollToPage({
                     pageNumber: activePage.value?.toNumber() || 0,
                     behavior: "smooth"
@@ -328,6 +313,11 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
             });
         }
 
+        /**
+         * Set the value of the Mendix object of the active page when the page is changed in the viewer.
+         * We only set this up once to avoid multiple event handlers being registered,
+         * which would cause multiple updates and potentially performance issues.
+         */
         if (!listeningToPageChanges.current && activePage) {
             const sync = async (): Promise<void> => {
                 const registry = await viewerRef.current?.registry;
@@ -341,126 +331,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
         }
     };
 
-    // Build disabledCategories from boolean props
-    // Maps widget property keys to one or more viewer category strings
-    const categoryMap: Record<string, string[]> = {
-        catZoom: ["zoom"],
-        catZoomIn: ["zoom-in"],
-        catZoomOut: ["zoom-out"],
-        catZoomFitPage: ["zoom-fit-page"],
-        catZoomFitWidth: ["zoom-fit-width"],
-        catZoomMarquee: ["zoom-marquee"],
-        catZoomLevel: ["zoom-level"],
-        catAnnotation: ["annotation", "mode-annotate"],
-        catAnnotationMarkup: ["annotation-markup"],
-        catAnnotationHighlight: ["annotation-highlight"],
-        catAnnotationUnderline: ["annotation-underline"],
-        catAnnotationStrikeout: ["annotation-strikeout"],
-        catAnnotationSquiggly: ["annotation-squiggly"],
-        catAnnotationInk: ["annotation-ink"],
-        catAnnotationText: ["annotation-text"],
-        catAnnotationStamp: ["annotation-stamp", "stamp"],
-        catAnnotationStyle: ["annotation-style", "panel-annotation-style"],
-        catAnnotationInsertText: ["annotation-insert-text"],
-        catAnnotationReplaceText: ["annotation-replace-text"],
-        catAnnotationShape: ["annotation-shape", "mode-shapes"],
-        catAnnotationRectangle: ["annotation-rectangle"],
-        catAnnotationCircle: ["annotation-circle"],
-        catAnnotationLine: ["annotation-line"],
-        catAnnotationArrow: ["annotation-arrow"],
-        catAnnotationPolygon: ["annotation-polygon"],
-        catAnnotationPolyline: ["annotation-polyline"],
-        catForm: ["form"],
-        catFormTextfield: ["form-textfield"],
-        catFormCheckbox: ["form-checkbox"],
-        catFormRadio: ["form-radio"],
-        catFormSelect: ["form-select"],
-        catFormListbox: ["form-listbox"],
-        catFormFillMode: ["form-fill-mode"],
-        catInsert: ["insert"],
-        catInsertRubberStamp: ["insert-rubber-stamp"],
-        catInsertSignature: ["insert-signature"],
-        catInsertImage: ["insert-image"],
-        catRedaction: ["redaction", "mode-redact"],
-        catRedactionArea: ["redaction-area"],
-        catRedactionText: ["redaction-text"],
-        catRedactionApply: ["redaction-apply"],
-        catRedactionClear: ["redaction-clear"],
-        catDocument: ["document"],
-        catDocumentOpen: ["document-open"],
-        catDocumentClose: ["document-close"],
-        catDocumentPrint: ["document-print"],
-        catDocumentCapture: ["document-capture"],
-        catDocumentExport: ["document-export"],
-        catDocumentFullscreen: ["document-fullscreen"],
-        catDocumentProtect: ["document-protect"],
-        catPage: ["page"],
-        catSpread: ["spread"],
-        catRotate: ["rotate"],
-        catScroll: ["scroll"],
-        catNavigation: ["navigation"],
-        catPanel: ["panel"],
-        catPanelSidebar: ["panel-sidebar"],
-        catPanelSearch: ["panel-search"],
-        catPanelComment: ["panel-comment"],
-        catTools: ["tools"],
-        catPan: ["pan"],
-        catPointer: ["pointer"],
-        catCapture: ["capture"],
-        catSelection: ["selection"],
-        catSelectionCopy: ["selection-copy"],
-        catHistory: ["history"],
-        catHistoryUndo: ["history-undo"],
-        catHistoryRedo: ["history-redo"]
-    };
-
-    const disabledCategories: string[] = [];
-    for (const [propKey, categories] of Object.entries(categoryMap)) {
-        if (!(props as any)[propKey]) {
-            disabledCategories.push(...categories);
-        }
-    }
-    if (!annotationsEnabled) {
-        disabledCategories.push("annotation", "mode-annotate", "mode-shapes");
-    }
-
-    // Read-only mode: disable all modification-related categories
-    if (props.readOnly) {
-        disabledCategories.push(
-            "annotation",
-            "mode-annotate",
-            "mode-shapes",
-            "annotation-markup",
-            "annotation-highlight",
-            "annotation-underline",
-            "annotation-strikeout",
-            "annotation-squiggly",
-            "annotation-ink",
-            "annotation-text",
-            "annotation-stamp",
-            "annotation-shape",
-            "annotation-rectangle",
-            "annotation-circle",
-            "annotation-line",
-            "annotation-arrow",
-            "annotation-polygon",
-            "annotation-polyline",
-            "redaction",
-            "mode-redact",
-            "redaction-area",
-            "redaction-text",
-            "redaction-apply",
-            "redaction-clear",
-            "history",
-            "history-undo",
-            "history-redo",
-            "document-open",
-            "document-close",
-            "document-capture",
-            "document-protect"
-        );
-    }
-
+    const disabledCategories = getDisabledCategories(props);
     const effectiveAnnotationsEnabled = props.readOnly ? false : annotationsEnabled;
 
     const viewerReady =

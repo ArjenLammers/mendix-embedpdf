@@ -130,7 +130,7 @@ function hexToRgbFloats(hex: string): [number, number, number] | null {
 }
 
 function rgbFloatsToHex(r: number, g: number, b: number): string {
-    const toHex = (v: number) =>
+    const toHex = (v: number): string =>
         Math.round(Math.min(1, Math.max(0, v)) * 255)
             .toString(16)
             .padStart(2, "0");
@@ -169,16 +169,16 @@ export function annotationsToXFDF(
         }
         const { x, y } = rect.origin;
         const { width, height } = rect.size;
-        
+
         // For FreeText and other annotations, convert from device coords (y-down) to PDF user space (y-up)
         const isFreeText = annotationType === 3;
         if (isFreeText && pageHeight !== undefined) {
             // In PDF space (y-up): y1 is bottom, y2 is top
-            const y1 = pageHeight - (y + height);  // bottom in PDF space
-            const y2 = pageHeight - y;              // top in PDF space
+            const y1 = pageHeight - (y + height); // bottom in PDF space
+            const y2 = pageHeight - y; // top in PDF space
             return `${x},${y1},${x + width},${y2}`;
         }
-        
+
         // For other annotation types without pageHeight, use original coordinates
         return `${x},${y},${x + width},${y + height}`;
     };
@@ -249,9 +249,8 @@ export function annotationsToXFDF(
             // border color when a border is intended, otherwise white to force a transparent-
             // looking border that won't show the font color.
             const hasBorder = annot.strokeWidth !== undefined && annot.strokeWidth > 0;
-            const borderColor = annot.strokeColor && annot.strokeColor !== "transparent"
-                ? annot.strokeColor
-                : undefined;
+            const borderColor =
+                annot.strokeColor && annot.strokeColor !== "transparent" ? annot.strokeColor : undefined;
             if (hasBorder && borderColor && borderColor.toLowerCase() !== annot.fontColor?.toLowerCase()) {
                 xfdf += ` color="${escapeXml(String(borderColor))}"`;
             }
@@ -260,7 +259,9 @@ export function annotationsToXFDF(
             const bgColor =
                 annot.backgroundColor && annot.backgroundColor !== "transparent"
                     ? annot.backgroundColor
-                    : annot.color && annot.color !== "transparent" && annot.color.toLowerCase() !== annot.fontColor?.toLowerCase()
+                    : annot.color &&
+                      annot.color !== "transparent" &&
+                      annot.color.toLowerCase() !== annot.fontColor?.toLowerCase()
                     ? annot.color
                     : undefined;
             if (bgColor) {
@@ -459,21 +460,21 @@ export function parseXFDF(
             return { origin: { x: 0, y: 0 }, size: { width: 0, height: 0 } };
         }
         const [x1, y1, x2, y2] = parts;
-        
+
         // For FreeText annotations, convert from PDF coords (y-up) back to device coords (y-down)
         if (isFreeText && pageHeight !== undefined) {
             // In PDF space: y1 is bottom, y2 is top
             // Convert back to device coords (y-down)
-            const yBottom = y1;  // bottom in PDF space
-            const yTop = y2;     // top in PDF space
-            const yOrigin = pageHeight - yTop;    // top in device coords
-            const ySize = yTop - yBottom;        // height
+            const yBottom = y1; // bottom in PDF space
+            const yTop = y2; // top in PDF space
+            const yOrigin = pageHeight - yTop; // top in device coords
+            const ySize = yTop - yBottom; // height
             return {
                 origin: { x: x1, y: yOrigin },
                 size: { width: x2 - x1, height: ySize }
             };
         }
-        
+
         // For other annotation types, use original parsing
         return {
             origin: { x: x1, y: y1 },
@@ -496,7 +497,11 @@ export function parseXFDF(
             type: typeCode,
             page: parseInt(child.getAttribute("page") || "0", 10),
             pageIndex: parseInt(child.getAttribute("page") || "0", 10),
-            rect: parseRect(child.getAttribute("rect") || "0,0,0,0", pageSizes?.[parseInt(child.getAttribute("page") || "0", 10)]?.height, typeCode === 3)
+            rect: parseRect(
+                child.getAttribute("rect") || "0,0,0,0",
+                pageSizes?.[parseInt(child.getAttribute("page") || "0", 10)]?.height,
+                typeCode === 3
+            )
         };
 
         // Text markup annotations (highlight, underline, squiggly, strikeout) require segmentRects
