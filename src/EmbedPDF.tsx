@@ -99,18 +99,6 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
     }, [file]);
 
     useEffect(() => {
-        if (!listeningToPageChanges.current && activePage) {
-            const sync = async (): Promise<void> => {
-                const registry = await viewerRef.current?.registry;
-                const scrollPlugin = registry?.getPlugin<ScrollPlugin>("scroll")?.provides() as ScrollPlugin;
-                scrollPlugin.onPageChange((event: ScrollEvent) => {
-                    activePage.setValue(new Big(event.pageNumber));
-                });
-                listeningToPageChanges.current = true;
-            };
-            sync();
-        }
-
         if (activePage?.status === "available") {
             const sync = async (): Promise<void> => {
                 const registry = await viewerRef.current?.registry;
@@ -122,6 +110,7 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                     return; // No active document yet, skip scrolling
                 }
                 const scrollPlugin = registry?.getPlugin<ScrollPlugin>("scroll")?.provides() as ScrollPlugin;
+                if (!scrollPlugin) return;
                 scrollPlugin.scrollToPage({
                     pageNumber: activePage.value?.toNumber() || 0,
                     behavior: "smooth"
@@ -338,6 +327,18 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
                 }
             });
         }
+
+        if (!listeningToPageChanges.current && activePage) {
+            const sync = async (): Promise<void> => {
+                const registry = await viewerRef.current?.registry;
+                const scrollPlugin = registry?.getPlugin<ScrollPlugin>("scroll")?.provides() as ScrollPlugin;
+                scrollPlugin.onPageChange((event: ScrollEvent) => {
+                    activePage.setValue(new Big(event.pageNumber));
+                });
+                listeningToPageChanges.current = true;
+            };
+            sync();
+        }
     };
 
     // Build disabledCategories from boolean props
@@ -462,40 +463,46 @@ export function EmbedPDF(props: EmbedPDFContainerProps): ReactElement {
 
     const effectiveAnnotationsEnabled = props.readOnly ? false : annotationsEnabled;
 
+    const viewerReady =
+        (!annotationAuthor || annotationAuthor.status === "available") &&
+        (!activePage || activePage.status === "available");
+
     return (
         <div style={{ height: "100vh" }} ref={containerRef}>
-            <PDFViewer
-                ref={viewerRef}
-                config={{
-                    log: false,
-                    src: typeof file?.value?.uri === "string" ? file.value.uri : undefined,
-                    theme: {
-                        preference: props.themePreference
-                    },
-                    wasmUrl: `${window.location.protocol}//${window.location.host}/pdfium.wasm`,
-                    disabledCategories,
-                    i18n: {
-                        defaultLocale: "nl"
-                    },
-                    annotations: {
-                        enabled: effectiveAnnotationsEnabled,
-                        autoCommit,
-                        annotationAuthor: annotationAuthor?.value || "Mendix User",
-                        selectAfterCreate
-                    },
-                    documentManager: {
-                        maxDocuments: 1
-                    },
-                    permissions: {
-                        overrides: {
-                            print: !props.catDocumentPrint,
-                            modifyAnnotations: !props.readOnly
+            {viewerReady && (
+                <PDFViewer
+                    ref={viewerRef}
+                    config={{
+                        log: false,
+                        src: typeof file?.value?.uri === "string" ? file.value.uri : undefined,
+                        theme: {
+                            preference: props.themePreference
+                        },
+                        wasmUrl: `${window.location.protocol}//${window.location.host}/pdfium.wasm`,
+                        disabledCategories,
+                        i18n: {
+                            defaultLocale: "nl"
+                        },
+                        annotations: {
+                            enabled: effectiveAnnotationsEnabled,
+                            autoCommit,
+                            annotationAuthor: annotationAuthor?.value || "Mendix User",
+                            selectAfterCreate
+                        },
+                        documentManager: {
+                            maxDocuments: 1
+                        },
+                        permissions: {
+                            overrides: {
+                                print: !props.catDocumentPrint,
+                                modifyAnnotations: !props.readOnly
+                            }
                         }
-                    }
-                }}
-                style={{ width: "100%", height: "100%" }}
-                onReady={ready}
-            />
+                    }}
+                    style={{ width: "100%", height: "100%" }}
+                    onReady={ready}
+                />
+            )}
         </div>
     );
 }
