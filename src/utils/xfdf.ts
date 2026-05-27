@@ -163,23 +163,22 @@ export function annotationsToXFDF(
         ).padStart(2, "0")}`;
     };
 
-    const getRectString = (rect: Annotation["rect"], pageHeight?: number, annotationType?: number): string => {
+    const getRectString = (rect: Annotation["rect"], pageHeight?: number, _annotationType?: number): string => {
         if (!rect?.origin || !rect?.size) {
             return "0,0,0,0";
         }
         const { x, y } = rect.origin;
         const { width, height } = rect.size;
 
-        // For FreeText and other annotations, convert from device coords (y-down) to PDF user space (y-up)
-        const isFreeText = annotationType === 3;
-        if (isFreeText && pageHeight !== undefined) {
+        // Convert from device coords (y-down) to PDF user space (y-up)
+        if (pageHeight !== undefined) {
             // In PDF space (y-up): y1 is bottom, y2 is top
             const y1 = pageHeight - (y + height); // bottom in PDF space
             const y2 = pageHeight - y; // top in PDF space
             return `${x},${y1},${x + width},${y2}`;
         }
 
-        // For other annotation types without pageHeight, use original coordinates
+        // Fallback without pageHeight: use original coordinates
         return `${x},${y},${x + width},${y + height}`;
     };
 
@@ -200,7 +199,24 @@ export function annotationsToXFDF(
         const tagName = annotationTypeCodeMap[annot.type] || "text";
         const pageNum = annot.page ?? annot.pageIndex ?? 0;
         const pageHeight = pageSizes?.[pageNum]?.height;
-        const rect = getRectString(annot.rect, pageHeight, annot.type);
+
+        // For text markup types the library stores annotation.rect in PDF user space (y-up)
+        // while segmentRects are in device space (y-down). getRectString expects device space,
+        // so using annot.rect directly would double-flip the y-axis. Derive the rect from the
+        // segmentRects bounding box instead, which is in the correct (device) coordinate system.
+        const textMarkupExportTypes = [9, 10, 11, 12]; // HIGHLIGHT, UNDERLINE, SQUIGGLY, STRIKEOUT
+        let rectSource = annot.rect;
+        if (textMarkupExportTypes.includes(annot.type) && annot.segmentRects && annot.segmentRects.length > 0) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const sr of annot.segmentRects) {
+                minX = Math.min(minX, sr.origin.x);
+                minY = Math.min(minY, sr.origin.y);
+                maxX = Math.max(maxX, sr.origin.x + sr.size.width);
+                maxY = Math.max(maxY, sr.origin.y + sr.size.height);
+            }
+            rectSource = { origin: { x: minX, y: minY }, size: { width: maxX - minX, height: maxY - minY } };
+        }
+        const rect = getRectString(rectSource, pageHeight, annot.type);
 
         xfdf += `    <${tagName}`;
         xfdf += ` page="${pageNum}"`;
@@ -214,6 +230,10 @@ export function annotationsToXFDF(
         if (!isFreeText) {
             if (annot.color) {
                 xfdf += ` color="${escapeXml(String(annot.color))}"`;
+            } else {
+                if (annot.strokeColor) {
+                    xfdf += ` color="${escapeXml(String(annot.strokeColor))}"`;
+                }
             }
             if (annot.strokeColor) {
                 xfdf += ` stroke-color="${escapeXml(String(annot.strokeColor))}"`;
@@ -454,15 +474,15 @@ export function parseXFDF(
         return undefined;
     };
 
-    const parseRect = (rectStr: string, pageHeight?: number, isFreeText?: boolean): Annotation["rect"] => {
+    const parseRect = (rectStr: string, pageHeight?: number): Annotation["rect"] => {
         const parts = rectStr.split(",").map(Number);
         if (parts.length !== 4) {
             return { origin: { x: 0, y: 0 }, size: { width: 0, height: 0 } };
         }
         const [x1, y1, x2, y2] = parts;
 
-        // For FreeText annotations, convert from PDF coords (y-up) back to device coords (y-down)
-        if (isFreeText && pageHeight !== undefined) {
+        // Convert from PDF coords (y-up) back to device coords (y-down)
+        if (pageHeight !== undefined) {
             // In PDF space: y1 is bottom, y2 is top
             // Convert back to device coords (y-down)
             const yBottom = y1; // bottom in PDF space
@@ -475,7 +495,7 @@ export function parseXFDF(
             };
         }
 
-        // For other annotation types, use original parsing
+        // Fallback without pageHeight: use original parsing
         return {
             origin: { x: x1, y: y1 },
             size: { width: x2 - x1, height: y2 - y1 }
@@ -499,8 +519,7 @@ export function parseXFDF(
             pageIndex: parseInt(child.getAttribute("page") || "0", 10),
             rect: parseRect(
                 child.getAttribute("rect") || "0,0,0,0",
-                pageSizes?.[parseInt(child.getAttribute("page") || "0", 10)]?.height,
-                typeCode === 3
+                pageSizes?.[parseInt(child.getAttribute("page") || "0", 10)]?.height
             )
         };
 
@@ -553,6 +572,24 @@ export function parseXFDF(
                     // Fall back to using the rect as a single segment
                     annotation.segmentRects = [annotation.rect];
                 }
+            }
+
+            // Recompute rect from segmentRects (derived from coords, always in correct space).
+            // This fixes annotations whose stored rect was written in device/screen coordinates
+            // rather than PDF user space — importing them would double-flip the y-axis, placing
+            // the clickable area at the wrong vertical position.
+            if (annotation.segmentRects && annotation.segmentRects.length > 0) {
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                for (const sr of annotation.segmentRects) {
+                    minX = Math.min(minX, sr.origin.x);
+                    minY = Math.min(minY, sr.origin.y);
+                    maxX = Math.max(maxX, sr.origin.x + sr.size.width);
+                    maxY = Math.max(maxY, sr.origin.y + sr.size.height);
+                }
+                annotation.rect = {
+                    origin: { x: minX, y: minY },
+                    size: { width: maxX - minX, height: maxY - minY }
+                };
             }
 
             // Read strokeColor from stroke-color attribute or fall back to color
