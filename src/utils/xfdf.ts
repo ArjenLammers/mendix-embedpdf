@@ -207,7 +207,10 @@ export function annotationsToXFDF(
         const textMarkupExportTypes = [9, 10, 11, 12]; // HIGHLIGHT, UNDERLINE, SQUIGGLY, STRIKEOUT
         let rectSource = annot.rect;
         if (textMarkupExportTypes.includes(annot.type) && annot.segmentRects && annot.segmentRects.length > 0) {
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            let minX = Infinity;
+            let minY = Infinity;
+            let maxX = -Infinity;
+            let maxY = -Infinity;
             for (const sr of annot.segmentRects) {
                 minX = Math.min(minX, sr.origin.x);
                 minY = Math.min(minY, sr.origin.y);
@@ -579,7 +582,10 @@ export function parseXFDF(
             // rather than PDF user space — importing them would double-flip the y-axis, placing
             // the clickable area at the wrong vertical position.
             if (annotation.segmentRects && annotation.segmentRects.length > 0) {
-                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                let minX = Infinity;
+                let minY = Infinity;
+                let maxX = -Infinity;
+                let maxY = -Infinity;
                 for (const sr of annotation.segmentRects) {
                     minX = Math.min(minX, sr.origin.x);
                     minY = Math.min(minY, sr.origin.y);
